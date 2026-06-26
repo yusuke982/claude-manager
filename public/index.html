@@ -1,0 +1,1783 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ClaudeManager</title>
+<style>
+  :root {
+    --bg:#faf9f5; --surface:#ffffff; --surface-2:#f3f1ea; --hover:#f0eee6;
+    --border:#e6e3d9; --border-strong:#d8d4c7;
+    --text:#1f1e1d; --muted:#73716a; --faint:#9b988e;
+    --accent:#c96442; --accent-soft:#f6e9e2; --accent-line:#e8c7b8;
+    --ok:#5c8a5a; --info:#5a76b8;
+    --serif:"Tiempos",ui-serif,Georgia,"Times New Roman",serif;
+    --sans:ui-sans-serif,-apple-system,"Hiragino Kaku Gothic ProN","Helvetica Neue",sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  * { box-sizing:border-box; }
+  html,body { height:100%; max-width:100%; overflow-x:hidden; }
+  body { margin:0; font-family:var(--sans); background:var(--bg); color:var(--text); -webkit-font-smoothing:antialiased; font-size:14px; }
+  a { color:inherit; }
+  .topbar > * { min-width:0; }
+  .wordmark { overflow:hidden; }
+  .wordmark span:last-child { overflow:hidden; text-overflow:ellipsis; }
+
+  .app { min-height:100vh; }
+
+  /* ── Sidebar (drawer) ── */
+  aside { background:var(--surface-2); border-right:1px solid var(--border); padding:22px 14px; display:flex; flex-direction:column; gap:6px; position:fixed; top:0; left:0; width:248px; height:100vh; z-index:40; transition:transform .22s ease; overflow-y:auto; }
+  .app.nav-hidden aside { transform:translateX(-100%); }
+  .brand { display:flex; align-items:baseline; gap:8px; padding:4px 10px 18px; }
+  .brand h1 { font-family:var(--serif); font-size:20px; font-weight:600; margin:0; letter-spacing:-.01em; }
+  .navitem { display:flex; align-items:center; justify-content:space-between; padding:8px 11px; border-radius:8px; cursor:pointer; color:var(--muted); font-weight:500; transition:background .12s,color .12s; }
+  .navitem:hover { background:var(--hover); color:var(--text); }
+  .navitem.active { background:var(--surface); color:var(--text); box-shadow:0 0 0 1px var(--border); font-weight:600; }
+  .navitem .ct { font-size:12px; color:var(--faint); font-variant-numeric:tabular-nums; }
+  .navitem.active .ct { color:var(--accent); }
+
+  /* ── Main ── */
+  main { display:flex; flex-direction:column; min-width:0; margin-left:248px; transition:margin-left .22s ease; }
+  .app.nav-hidden main { margin-left:0; }
+  .topbar { position:sticky; top:0; z-index:5; background:rgba(250,249,245,.85); backdrop-filter:blur(8px); border-bottom:1px solid var(--border); padding:18px 28px; display:flex; align-items:center; gap:18px; }
+  .topbar h2 { font-family:var(--serif); font-weight:600; font-size:18px; margin:0; letter-spacing:-.01em; }
+  .topbar .desc { color:var(--muted); font-size:12.5px; }
+  .wordmark { font-family:var(--serif); font-weight:600; font-size:17px; cursor:pointer; display:flex; align-items:center; gap:7px; white-space:nowrap; color:var(--text); }
+  .pagehead { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; padding:18px 28px 0; max-width:100%; }
+  .pagehead h2 { font-family:var(--serif); font-weight:600; font-size:22px; margin:0; letter-spacing:-.01em; }
+  .pagehead .desc { color:var(--muted); font-size:12.5px; margin-top:2px; }
+  .search { margin-left:auto; position:relative; }
+  .search input { width:240px; background:var(--surface); border:1px solid var(--border-strong); border-radius:9px; padding:8px 12px 8px 32px; font-size:13px; font-family:var(--sans); color:var(--text); outline:none; transition:border-color .12s,box-shadow .12s; }
+  .search input:focus { border-color:var(--accent-line); box-shadow:0 0 0 3px var(--accent-soft); }
+  .search svg { position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--faint); }
+  .content { padding:22px 28px 70px; }
+
+  /* ── List rows (Skills/Agents) ── */
+  .list { border:1px solid var(--border); border-radius:12px; overflow:hidden; background:var(--surface); }
+  .rowitem { display:grid; grid-template-columns:minmax(180px,1.1fr) 2.4fr auto; gap:18px; align-items:center; padding:13px 18px; border-bottom:1px solid var(--border); cursor:pointer; transition:background .1s; }
+  .rowitem:last-child { border-bottom:none; }
+  .rowitem:hover { background:var(--hover); }
+  .rowitem .nm { font-weight:600; font-size:13.5px; display:flex; align-items:center; gap:9px; min-width:0; }
+  .rowitem .nm .label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .rowitem .ds { color:var(--muted); font-size:12.5px; line-height:1.5; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .badge { font-size:10.5px; font-weight:600; padding:2px 8px; border-radius:5px; white-space:nowrap; letter-spacing:.02em; }
+  .badge.local { background:var(--accent-soft); color:var(--accent); }
+  .badge.user { background:#e7efe6; color:var(--ok); }
+  .badge.plugin { background:#e9edf6; color:var(--info); }
+  .act { color:var(--faint); font-size:12px; font-weight:600; opacity:0; transition:opacity .1s; }
+  .rowitem:hover .act { opacity:1; color:var(--accent); }
+
+  /* ── Project cards ── */
+  .pgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(360px,1fr)); gap:14px; }
+  .pcard { border:1px solid var(--border); border-radius:12px; background:var(--surface); padding:0; overflow:hidden; }
+  .pcard .ph { padding:14px 16px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+  .pcard .ph .pname { font-family:var(--mono); font-size:12px; color:var(--text); word-break:break-all; line-height:1.5; }
+  .pcard .ph .meta { font-size:11.5px; color:var(--muted); margin-top:3px; }
+  .pcard .pb { padding:8px 10px; display:flex; flex-direction:column; }
+  .pcard-lg .pb-lg { padding:0; }
+  .pj-eye { padding:13px 16px; background:linear-gradient(180deg,var(--accent-soft),transparent); border-bottom:1px solid var(--border); font-size:13px; line-height:1.7; color:var(--text); position:relative; }
+  .pj-eye.muted { background:none; color:var(--faint); font-size:12px; }
+  .pj-src { font-size:10px; color:var(--faint); font-weight:600; margin-left:6px; }
+  .pj-sec { padding:12px 16px; border-bottom:1px solid var(--border); }
+  .pj-sec:last-child { border-bottom:none; }
+  .pj-h { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:9px; }
+  .pj-bar { height:7px; background:var(--surface-2); border-radius:4px; overflow:hidden; }
+  .pj-bar > div { height:100%; background:var(--accent); border-radius:4px; }
+  .pj-barlbl { font-size:11px; color:var(--muted); margin-top:5px; font-variant-numeric:tabular-nums; }
+  .pj-tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:9px; }
+  .pj-tag { font-size:11px; background:var(--surface-2); border:1px solid var(--border); border-radius:6px; padding:3px 9px; color:var(--muted); }
+  .pj-list { margin:9px 0 0; padding-left:18px; font-size:12.5px; line-height:1.7; color:var(--text); }
+  .pj-list li { margin:2px 0; }
+  .pj-list.warn li { color:#9a4a32; }
+  .mcp-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:8px; }
+  .mcp-item { display:flex; gap:10px; align-items:center; padding:9px 11px; border:1px solid var(--border); border-radius:9px; background:var(--surface); }
+  .mcp-ic { flex-shrink:0; display:inline-flex; }
+  .mcp-tx { min-width:0; }
+  .mcp-nm { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .mcp-st { font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .mcp-item { cursor:pointer; transition:background .1s; }
+  .mcp-item:hover { background:var(--hover); }
+  .mcp-fb { width:24px; height:24px; border-radius:6px; background:var(--surface-2); display:inline-flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:var(--muted); }
+  .card-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:12px; }
+  .scard { border:1px solid var(--border); border-radius:12px; background:var(--surface); padding:14px 16px; cursor:pointer; transition:border-color .12s,box-shadow .12s; }
+  .scard:hover { border-color:var(--accent-line); box-shadow:0 3px 12px rgba(31,30,29,.06); }
+  .scard-h { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:7px; }
+  .scard-nm { font-weight:700; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .scard-d { color:var(--muted); font-size:12.5px; line-height:1.6; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+  .scard-nm { -webkit-line-clamp:2; white-space:normal; display:-webkit-box; -webkit-box-orient:vertical; max-height:2.8em; }
+  /* セッション：プロジェクト見出し＋要約（更新ログ） */
+  .sess-grp-h { font-family:var(--serif); font-size:15px; font-weight:600; margin:20px 2px 10px; letter-spacing:-.01em; }
+  .sess-grp-h:first-child { margin-top:0; }
+  .d-chips { display:flex; flex-wrap:wrap; gap:7px; }
+  .d-chip { font-size:11.5px; font-weight:600; padding:4px 10px; border:1px solid var(--border-strong); border-radius:7px; color:var(--muted); background:var(--surface); }
+  .d-chip b { color:var(--text); font-variant-numeric:tabular-nums; }
+  .d-changes { display:flex; flex-direction:column; gap:2px; }
+  .d-change { display:flex; align-items:center; gap:10px; padding:7px 0; border-bottom:1px solid var(--border); font-size:13px; }
+  .d-change:last-child { border-bottom:none; }
+  .d-act { font-size:10.5px; font-weight:700; padding:2px 7px; border-radius:5px; flex-shrink:0; }
+  .d-act.edit { background:var(--accent-soft); color:var(--accent); }
+  .d-act.new { background:#e7efe6; color:var(--ok); }
+  .d-file { font-family:var(--mono); font-size:12.5px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .d-cnt { margin-left:auto; font-size:11px; color:var(--faint); font-variant-numeric:tabular-nums; }
+  .d-decs { display:flex; flex-direction:column; gap:1px; }
+  .d-dec { display:flex; gap:9px; align-items:flex-start; padding:7px 0; border-bottom:1px solid var(--border); font-size:13px; line-height:1.6; color:var(--text); }
+  .d-dec:last-child { border-bottom:none; }
+  .d-check { color:var(--ok); font-weight:800; flex-shrink:0; font-size:12px; margin-top:1px; }
+  .d-grp { margin-bottom:14px; }
+  .d-grp:last-child { margin-bottom:0; }
+  .d-grp-h { font-size:12px; font-weight:700; color:var(--accent); margin-bottom:4px; }
+  /* 優先度バッジ */
+  .prio { font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:5px; white-space:nowrap; }
+  .prio.h { background:#fbe4dd; color:#b3402a; }
+  .prio.m { background:#f3ecd9; color:#9a7b1f; }
+  .prio.l { background:#e7efe6; color:var(--ok); }
+  .req-row { display:flex; gap:10px; align-items:flex-start; padding:11px 0; border-bottom:1px solid var(--border); }
+  .req-row:last-child { border-bottom:none; }
+  .req-row.done { opacity:.5; }
+  .req-row.done .req-t { text-decoration:line-through; }
+  .req-t { font-size:13.5px; font-weight:600; line-height:1.5; }
+  .req-meta { font-size:11px; color:var(--faint); margin-top:2px; }
+  #toast { position:fixed; left:50%; bottom:24px; transform:translate(-50%,40px); background:#1f1e1d; color:#fff; padding:11px 18px; border-radius:10px; font-size:13px; font-weight:500; box-shadow:0 10px 30px rgba(0,0,0,.25); opacity:0; pointer-events:none; transition:.25s; z-index:80; max-width:90vw; text-align:center; }
+  #toast.on { opacity:1; transform:translate(-50%,0); }
+  /* プロジェクト：コンパクトカード */
+  .pcard-c { border:1px solid var(--border); border-radius:14px; background:var(--surface); padding:16px 18px; cursor:pointer; transition:border-color .12s,box-shadow .12s,transform .1s; }
+  .pcard-c:hover { border-color:var(--accent-line); box-shadow:0 4px 16px rgba(31,30,29,.07); transform:translateY(-1px); }
+  .pcard-c-top { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .pcard-c-nm { font-weight:700; font-size:16px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pcard-c-ov { color:var(--muted); font-size:12.5px; line-height:1.6; margin-top:8px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .ring { --p:0; flex-shrink:0; width:46px; height:46px; border-radius:50%; display:grid; place-items:center; background:conic-gradient(var(--accent) calc(var(--p)*1%), var(--surface-2) 0); }
+  .ring span { width:36px; height:36px; border-radius:50%; background:var(--surface); display:grid; place-items:center; font-size:11px; font-weight:800; color:var(--accent); }
+  /* プロジェクト詳細 LP */
+  .lp { max-width:820px; }
+  /* ── ホーム（LP） ── */
+  .home { max-width:920px; }
+  .home-hero { padding:26px 28px 30px; border:1px solid var(--accent-line); border-radius:18px; background:radial-gradient(120% 140% at 0% 0%, var(--accent-soft), var(--surface) 60%); margin-bottom:22px; }
+  .home-eyebrow { font-size:11px; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:.12em; }
+  .home-title { font-family:var(--serif); font-size:34px; font-weight:600; letter-spacing:-.02em; margin:8px 0 0; line-height:1.15; }
+  .home-lead { font-size:14.5px; line-height:1.85; color:var(--muted); margin:14px 0 0; max-width:640px; }
+  .home-cta { display:flex; gap:10px; flex-wrap:wrap; margin-top:20px; }
+  .home-sec { font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin:24px 2px 12px; }
+  .home-notes { display:flex; flex-direction:column; gap:10px; }
+  .home-note { display:flex; gap:12px; align-items:flex-start; border:1px solid var(--border); border-radius:13px; background:var(--surface); padding:14px 16px; }
+  .home-note .ni { width:30px; height:30px; flex-shrink:0; border-radius:9px; background:var(--accent-soft); color:var(--accent); display:flex; align-items:center; justify-content:center; }
+  .home-note b { font-size:13.5px; }
+  .home-note p { font-size:12.5px; line-height:1.7; color:var(--muted); margin:4px 0 0; }
+  .home-note code { font-family:var(--mono); font-size:11.5px; background:var(--surface-2); padding:1px 5px; border-radius:4px; }
+  .home-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; }
+  .home-art { border:1px solid var(--border); border-radius:16px; background:var(--surface); padding:18px 18px 16px; cursor:pointer; transition:border-color .12s,box-shadow .12s,transform .1s; display:flex; flex-direction:column; gap:4px; }
+  .home-art:hover { border-color:var(--accent-line); box-shadow:0 6px 20px rgba(31,30,29,.07); transform:translateY(-2px); }
+  .home-art .ic { width:38px; height:38px; border-radius:11px; background:var(--accent-soft); color:var(--accent); display:flex; align-items:center; justify-content:center; margin-bottom:8px; }
+  .home-art .num { font-family:var(--serif); font-size:30px; font-weight:600; line-height:1; letter-spacing:-.02em; }
+  .home-art .num span { font-size:13px; color:var(--faint); font-family:var(--sans); font-weight:500; margin-left:3px; }
+  .home-art .nm { font-size:14.5px; font-weight:700; }
+  .home-art .ds { font-size:12px; color:var(--muted); line-height:1.6; }
+  .home-art .hl { font-size:11px; color:var(--accent); font-weight:600; margin-top:auto; padding-top:6px; }
+  @media (max-width:760px){ .home-hero{padding:22px 18px 24px} .home-title{font-size:26px} .home-grid{grid-template-columns:1fr 1fr;gap:10px} .home-art{padding:14px} .home-art .num{font-size:24px} }
+  .lp-hero { padding:6px 2px 20px; }
+  .rs-bar { display:flex; gap:8px; align-items:center; background:var(--surface); border:1px solid var(--border); border-radius:11px; padding:6px 6px 6px 12px; margin-bottom:8px; }
+  .rs-bar input#rs-prompt { flex:1; min-width:0; border:none; background:none; outline:none; font-size:13.5px; font-family:var(--sans); color:var(--text); padding:6px 0; }
+  .rs-bar select#rs-model { border:1px solid var(--border); background:var(--surface-2); border-radius:7px; padding:5px 7px; font-size:11.5px; color:var(--muted); }
+  .rs-bar .rs-edit { display:flex; align-items:center; gap:4px; font-size:11.5px; color:var(--muted); white-space:nowrap; }
+  .rs-bar .btn.save { padding:7px 14px; }
+  .lp-title { font-family:var(--serif); font-size:30px; font-weight:600; margin:0; letter-spacing:-.02em; }
+  .lp-path { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-top:4px; word-break:break-all; }
+  .lp-lead { font-size:14.5px; line-height:1.8; color:var(--text); margin:14px 0 0; }
+  .lp-lead.muted { color:var(--faint); }
+  .lp-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:18px; }
+  .lp-card { border:1px solid var(--border); border-radius:14px; background:var(--surface); padding:18px 20px; margin-bottom:14px; }
+  .lp-h { font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:14px; }
+  .lp-rm { display:flex; gap:20px; align-items:center; }
+  .lp-gauge { position:relative; width:120px; height:120px; flex-shrink:0; }
+  .lp-gauge svg { width:120px; height:120px; transform:rotate(-90deg); }
+  .lp-gauge .g-bg { fill:none; stroke:var(--surface-2); stroke-width:11; }
+  .lp-gauge .g-fg { fill:none; stroke:var(--accent); stroke-width:11; stroke-linecap:round; transition:stroke-dashoffset .6s ease; }
+  .lp-gauge-c { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  .lp-gauge-c b { font-family:var(--serif); font-size:26px; line-height:1; }
+  .lp-gauge-c span { font-size:11px; color:var(--muted); margin-top:3px; }
+  .lp-timeline { display:flex; flex-direction:column; gap:0; }
+  .lp-tl { display:flex; gap:11px; align-items:flex-start; position:relative; padding-bottom:14px; }
+  .lp-tl:not(:last-child)::before { content:""; position:absolute; left:5px; top:13px; bottom:0; width:2px; background:var(--border); }
+  .lp-dot { width:12px; height:12px; border-radius:50%; background:var(--accent); flex-shrink:0; margin-top:2px; box-shadow:0 0 0 3px var(--accent-soft); z-index:1; }
+  .lp-tln { font-size:13.5px; font-weight:600; line-height:1.4; }
+  .lp-checks { display:flex; flex-direction:column; gap:9px; }
+  .lp-chk { display:flex; gap:10px; align-items:flex-start; font-size:13px; line-height:1.6; }
+  .lp-box { width:16px; height:16px; border-radius:5px; border:2px solid var(--border-strong); flex-shrink:0; margin-top:2px; }
+  .lp-chk.warn span:last-child { color:#9a4a32; }
+  .lp-box.warn { border-color:#d9a08e; background:#fbeae6; border-radius:50%; }
+  .act-day { font-size:11px; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:.04em; margin:14px 0 8px; }
+  .act-day:first-child { margin-top:0; }
+  .act-row { border-left:2px solid var(--accent-line); padding:2px 0 10px 13px; margin-left:4px; }
+  .act-ask { font-size:13.5px; line-height:1.6; color:var(--text); }
+  .act-meta { font-size:11px; color:var(--faint); margin-top:3px; }
+  @media (max-width:760px){ .lp-rm{flex-direction:column;align-items:flex-start;gap:14px} .lp-title{font-size:24px} }
+  .frow { display:flex; justify-content:space-between; align-items:center; padding:7px 8px; border-radius:7px; font-size:12px; }
+  .frow:hover { background:var(--hover); cursor:pointer; }
+  .frow .fn { color:var(--text); display:flex; gap:8px; align-items:center; min-width:0; }
+  .frow .fn .t { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .frow .fa { color:var(--faint); font-size:11px; font-weight:600; flex-shrink:0; white-space:nowrap; margin-left:8px; }
+  .frow:hover .fa { color:var(--accent); }
+  .ix { font-size:10px; font-weight:700; color:var(--faint); text-transform:uppercase; letter-spacing:.06em; }
+  .linkbtn { font-size:11.5px; font-weight:600; color:var(--accent); cursor:pointer; border:1px solid var(--accent-line); background:var(--surface); border-radius:7px; padding:4px 10px; white-space:nowrap; }
+  .linkbtn:hover { background:var(--accent-soft); }
+
+  /* ── Overview ── */
+  .tiles { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px; }
+  .tile { border:1px solid var(--border); border-radius:12px; background:var(--surface); padding:18px; }
+  .tile .n { font-family:var(--serif); font-size:30px; font-weight:600; letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
+  .tile .l { font-size:12px; color:var(--muted); margin-top:4px; }
+  .panel { border:1px solid var(--border); border-radius:12px; background:var(--surface); padding:18px 20px; margin-bottom:14px; }
+  .panel h3 { margin:0 0 14px; font-size:13px; font-weight:600; color:var(--text); text-transform:uppercase; letter-spacing:.05em; }
+  .bars { display:flex; align-items:flex-end; gap:3px; height:120px; }
+  .bars .b { flex:1; background:var(--accent); opacity:.32; border-radius:3px 3px 0 0; min-height:2px; transition:opacity .1s; }
+  .bars .b:hover { opacity:.7; }
+  .kv { display:flex; flex-direction:column; gap:9px; }
+  .kv .r { display:flex; justify-content:space-between; gap:8px 14px; font-size:13px; padding-bottom:9px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+  .kv .r:last-child { border-bottom:none; padding-bottom:0; }
+  .kv .r .k { color:var(--muted); flex-shrink:0; }
+  .kv .r .v { color:var(--text); font-weight:500; text-align:right; font-family:var(--mono); font-size:12px; min-width:0; word-break:break-all; overflow-wrap:anywhere; }
+  /* どのパネル/グリッドも画面幅を超えない安全策 */
+  .content, .panel, .two, .tiles, .card-grid, .pgrid, .mcp-grid, .list { max-width:100%; }
+  .frow, .rowitem, .mcp-item, .scard { max-width:100%; overflow:hidden; }
+  .chips { display:flex; flex-wrap:wrap; gap:7px; }
+  .chip { font-size:12px; background:var(--surface-2); border:1px solid var(--border); border-radius:7px; padding:4px 10px; color:var(--muted); font-family:var(--mono); }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .two > * { min-width:0; }
+  .empty { color:var(--muted); padding:60px 20px; text-align:center; font-size:14px; }
+
+  /* ── Editor modal ── */
+  .modal { position:fixed; inset:0; background:rgba(31,30,29,.34); backdrop-filter:blur(3px); display:none; align-items:center; justify-content:center; padding:24px; z-index:50; }
+  .modal.on { display:flex; }
+  .modal .box { background:var(--surface); border:1px solid var(--border-strong); border-radius:14px; width:100%; max-width:820px; max-height:88vh; display:flex; flex-direction:column; box-shadow:0 24px 60px rgba(31,30,29,.22); overflow:hidden; }
+  .modal .top { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:14px; }
+  .modal .top .ttl { font-weight:600; font-size:15px; }
+  .modal .top .path { font-size:11px; color:var(--faint); font-family:var(--mono); word-break:break-all; margin-top:2px; }
+  .modal .x { border:none; background:none; color:var(--muted); font-size:16px; cursor:pointer; padding:4px 8px; border-radius:6px; }
+  .modal .x:hover { background:var(--hover); }
+  .modal textarea { flex:1; min-height:56vh; background:var(--bg); color:var(--text); border:none; padding:18px 20px; font-family:var(--mono); font-size:13px; line-height:1.7; resize:none; outline:none; }
+  .modal .btns { padding:13px 20px; border-top:1px solid var(--border); display:flex; gap:10px; justify-content:flex-end; align-items:center; }
+  .btn { border:none; border-radius:8px; padding:9px 18px; font-weight:600; font-size:13px; cursor:pointer; font-family:var(--sans); }
+  .btn.save { background:var(--accent); color:#fff; }
+  .btn.save:hover { background:#b8573a; }
+  .btn.cancel { background:var(--surface-2); color:var(--text); border:1px solid var(--border); }
+  .btn:disabled { opacity:.45; cursor:not-allowed; }
+  .ro { color:var(--accent); font-size:12px; margin-right:auto; font-weight:500; }
+
+  /* ── Floating operator ── */
+  .fab { position:fixed; right:22px; bottom:22px; z-index:60; width:56px; height:56px; border-radius:50%; background:var(--accent); border:none; cursor:pointer; box-shadow:0 8px 24px rgba(201,100,66,.4); display:flex; align-items:center; justify-content:center; transition:transform .12s; }
+  .fab:hover { transform:scale(1.06); }
+  .fab svg { color:#fff; }
+  .fab .ring { position:absolute; inset:-4px; border-radius:50%; border:2.5px solid transparent; border-top-color:#fff; opacity:0; }
+  .fab.busy .ring { opacity:.9; animation:spin .8s linear infinite; }
+  /* Claudeキャラ：待機=寝顔+Zzz / 作業=起きて動く */
+  .fab .mascot { width:34px; height:34px; overflow:visible; }
+  .fab .mascot .body { transform-box:fill-box; transform-origin:center; animation:breathe 3.2s ease-in-out infinite; }
+  .fab .mascot .awake { display:none; }
+  .fab .mascot .zzz { opacity:0; animation:zzz 2.6s ease-in-out infinite; }
+  .fab.busy .mascot .asleep { display:none; }
+  .fab.busy .mascot .awake { display:block; }
+  .fab.busy .mascot .body { animation:hop .5s ease-in-out infinite; }
+  .fab.busy .mascot .zzz { display:none; }
+  @keyframes breathe { 0%,100%{transform:scale(1)} 50%{transform:scale(1.05)} }
+  @keyframes hop { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-2.5px)} }
+  @keyframes zzz { 0%{opacity:0;transform:translate(0,0) scale(.7)} 30%{opacity:1} 100%{opacity:0;transform:translate(4px,-9px) scale(1.1)} }
+  /* Hamburger + drawer */
+  .ham { display:inline-flex; flex-direction:column; gap:4px; width:34px; height:34px; align-items:center; justify-content:center; border:1px solid var(--border); background:var(--surface); border-radius:9px; cursor:pointer; flex-shrink:0; }
+  .ham span { width:16px; height:2px; background:var(--text); border-radius:2px; transition:.2s; }
+  .nav-ovl { position:fixed; inset:0; background:rgba(31,30,29,.3); z-index:39; display:none; }
+  .nav-ovl.on { display:block; }
+  .fab .dot { position:absolute; top:-2px; right:-2px; min-width:18px; height:18px; padding:0 4px; border-radius:9px; background:#1f1e1d; color:#fff; font-size:10px; font-weight:700; display:none; align-items:center; justify-content:center; }
+  .fab.has-unseen .dot { display:flex; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .fw { position:fixed; right:22px; bottom:88px; z-index:60; width:min(420px,calc(100vw - 28px)); height:min(620px,calc(100vh - 130px)); background:var(--surface); border:1px solid var(--border-strong); border-radius:16px; box-shadow:0 20px 60px rgba(31,30,29,.28); display:none; flex-direction:column; overflow:hidden; }
+  .fw.on { display:flex; }
+  .fw.on ~ .fab { display:none; }
+  .fw-head { padding:13px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; }
+  .fw-head .t { font-family:var(--serif); font-weight:600; font-size:16px; }
+  .fw-head .sp { width:14px; height:14px; border:2px solid var(--border-strong); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; display:none; }
+  .fw-head.busy .sp { display:inline-block; }
+  .fw-head .x { margin-left:auto; border:none; background:none; color:var(--muted); cursor:pointer; font-size:15px; padding:4px 7px; border-radius:6px; }
+  .fw-head .x:hover { background:var(--hover); }
+  .fw-ctl { display:flex; gap:6px; padding:9px 12px; border-bottom:1px solid var(--border); flex-wrap:wrap; align-items:center; }
+  .fw-ctl select { background:var(--surface); border:1px solid var(--border-strong); border-radius:7px; padding:5px 7px; font-size:11.5px; color:var(--text); }
+  .fw-thread { flex:1; overflow-y:auto; padding:6px; }
+  .fw-in { padding:10px 12px; border-top:1px solid var(--border); display:flex; gap:7px; }
+  .fw-in textarea { flex:1; min-height:40px; max-height:120px; background:var(--bg); border:1px solid var(--border-strong); border-radius:9px; padding:9px 11px; font-size:13px; font-family:var(--sans); color:var(--text); outline:none; resize:none; line-height:1.5; }
+  .modebtn { background:var(--surface); border:1px solid var(--border-strong); padding:5px 10px; font-size:11px; font-weight:600; color:var(--muted); cursor:pointer; border-radius:7px; }
+  .modebtn.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+
+  @media (max-width:760px) {
+    main { margin-left:0 !important; }
+    /* ヘッダは残し、ドロワーはその下から展開 */
+    .topbar { position:sticky; top:0; z-index:46; }
+    aside { top:58px; height:calc(100vh - 58px); z-index:44; box-shadow:4px 0 20px rgba(31,30,29,.12); }
+    .nav-ovl { top:58px; }
+    aside .brand { display:none; }
+    /* iOS: 入力で自動ズームしないよう16px以上に */
+    input, textarea, select { font-size:16px !important; }
+    /* topbar が潰れないよう説明を隠し、検索を縮める */
+    .topbar { padding:14px 16px; gap:10px; }
+    .topbar .desc { display:none; }
+    .crumb { display:none; }
+    .topbar h2 { font-size:18px; }
+    .topbar { padding:12px 14px; gap:8px; flex-wrap:nowrap; overflow:hidden; }
+    .wordmark { font-size:15px; flex-shrink:1; }
+    .search { min-width:0; }
+    .search input { width:100%; max-width:140px; }
+    #newbtn { padding:8px 9px !important; flex-shrink:0; }
+    .pagehead { padding:10px 14px 0; }
+    .pagehead h2 { font-size:19px; }
+    .content { padding:10px 14px 70px; }
+    /* グリッドは1カラムへ — 最小幅による横スクロールを防止 */
+    .pgrid { grid-template-columns:1fr; gap:10px; }
+    .card-grid { grid-template-columns:1fr; gap:8px; }
+    .mcp-grid { grid-template-columns:1fr 1fr; gap:6px; }
+    .search { margin-left:auto; }
+    .search input { width:128px; }
+    #newbtn { margin-left:6px !important; padding:8px 11px !important; }
+    /* オペレーターのコントロール行を折り返す */
+    .fw-ctl { flex-wrap:wrap; }
+    .fw-ctl select { flex:1 1 40%; min-width:0; }
+    .rowitem { grid-template-columns:1fr; gap:6px; }
+    .rowitem .act { display:none; }
+    .tiles { grid-template-columns:1fr 1fr; }
+    .two { grid-template-columns:1fr; }
+    .search input { width:150px; }
+    /* オペレーター — topbar下からbottomまで（キーボード展開時も見える） */
+    .fw { left:0; right:0; top:58px; bottom:0; width:auto; height:auto;
+          border-radius:0; border:none; border-top:1px solid var(--border); }
+    .fw.on { display:flex; animation:sheetUp .22s ease; }
+    @keyframes sheetUp { from { transform:translateY(100%);} to { transform:translateY(0);} }
+    .fw-ctl { gap:5px; padding:8px 10px; }
+    .fw-ctl select { flex:1; min-width:0; }
+    .fw-head .t { font-size:15px; }
+    .fab { right:16px; bottom:16px; width:52px; height:52px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="brand"><h1>ClaudeManager</h1></div>
+    <div class="navitem" data-tab="home"     onclick="go('home')"><span>ホーム</span></div>
+    <div class="navitem" data-tab="stats"    onclick="go('stats')"><span>ダッシュボード</span></div>
+    <div class="navitem" data-tab="skills"   onclick="go('skills')"><span>スキル</span><span class="ct" id="ct-skills"></span></div>
+    <div class="navitem" data-tab="agents"   onclick="go('agents')"><span>サブエージェント</span><span class="ct" id="ct-agents"></span></div>
+    <div class="navitem" data-tab="projects" onclick="go('projects')"><span>プロジェクト</span><span class="ct" id="ct-projects"></span></div>
+    <div class="navitem" data-tab="sessions" onclick="go('sessions')"><span>セッション</span><span class="ct" id="ct-sessions"></span></div>
+    <div class="navitem" data-tab="routines" onclick="go('routines')"><span>ルーチン</span><span class="ct" id="ct-routines"></span></div>
+  </aside>
+
+  <main>
+    <div class="topbar">
+      <button class="ham" onclick="toggleNav()" aria-label="メニュー"><span></span><span></span><span></span></button>
+      <span class="wordmark" onclick="go('home')" title="ホームへ">ClaudeManager</span>
+    </div>
+    <div class="pagehead">
+      <div style="min-width:0"><h2 id="ttl">ダッシュボード</h2><div class="desc" id="desc"></div></div>
+      <button class="linkbtn" id="newbtn" style="display:none;padding:8px 14px" onclick="openCreate()">＋ 新規</button>
+    </div>
+    <div class="content" id="content"><div class="empty">読み込み中…</div></div>
+  </main>
+</div>
+<div class="nav-ovl" id="nav-ovl" onclick="toggleNav(false)"></div>
+
+<div class="modal" id="modal">
+  <div class="box">
+    <div class="top">
+      <div><div class="ttl" id="m-title">編集</div><div class="path" id="m-path"></div></div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="linkbtn" id="m-preview" onclick="togglePreview()">プレビュー</button>
+        <button class="x" onclick="closeModal()">✕</button>
+      </div>
+    </div>
+    <textarea id="m-text" spellcheck="false"></textarea>
+    <div id="m-render" style="display:none;flex:1;min-height:56vh;overflow:auto;padding:18px 24px"></div>
+    <div class="btns">
+      <span class="ro" id="m-ro"></span>
+      <button class="btn del" id="m-del" style="display:none;background:#fbeae6;color:#b3402a;border:1px solid #eccabf" onclick="deleteFile()">削除</button>
+      <button class="btn cancel" onclick="closeModal()">閉じる</button>
+      <button class="btn save" id="m-save" onclick="saveFile()">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="createModal">
+  <div class="box" style="max-width:440px">
+    <div class="top"><div class="ttl" id="c-title">新規作成</div><button class="x" onclick="closeCreate()">✕</button></div>
+    <div style="padding:20px">
+      <label style="font-size:12px;color:var(--muted);font-weight:600">名前</label>
+      <input id="c-name" placeholder="例: deploy-checklist" style="width:100%;margin-top:7px;background:var(--bg);border:1px solid var(--border-strong);border-radius:9px;padding:10px 12px;font-size:14px;font-family:var(--sans);color:var(--text);outline:none" onkeydown="if(event.key==='Enter')doCreate()" />
+      <p id="c-hint" style="font-size:12px;color:var(--faint);margin:10px 0 0;line-height:1.6"></p>
+    </div>
+    <div class="btns">
+      <button class="btn cancel" onclick="closeCreate()">キャンセル</button>
+      <button class="btn save" onclick="doCreate()">作成して編集</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="mcpModal">
+  <div class="box" style="max-width:460px">
+    <div class="top"><div class="ttl">MCP連携</div><button class="x" onclick="closeMcp()">✕</button></div>
+    <div id="mcp-d-body" style="padding:20px;overflow-y:auto"></div>
+  </div>
+</div>
+
+<div class="modal" id="taskModal">
+  <div class="box" style="max-width:500px">
+    <div class="top"><div><div class="ttl" id="task-d-title">タスク</div></div><button class="x" onclick="closeTaskModal()">✕</button></div>
+    <div id="task-d-body" style="padding:18px 20px;overflow-y:auto;flex:1"></div>
+    <div class="btns">
+      <button class="btn cancel" onclick="closeTaskModal()">閉じる</button>
+      <button class="btn cancel" id="task-open-file" onclick="closeTaskModal();openFile(window._lpClaudeMd,window._lpFileTitle||'CLAUDE.md',{deletable:false})">CLAUDE.mdを開く</button>
+      <button class="btn save" id="task-send-btn" onclick="sendTaskToAssistant()">マネージャーに指示</button>
+    </div>
+  </div>
+</div>
+
+<!-- Floating operator -->
+<div class="fw" id="fw">
+  <div class="fw-head" id="fw-head">
+    <span class="t">マネージャー</span>
+    <span class="sp"></span>
+    <button class="x" onclick="toggleWidget(false)">✕</button>
+  </div>
+  <div class="fw-ctl">
+    <div style="display:inline-flex;gap:4px">
+      <button id="fw-md-propose" class="modebtn on" onclick="setMode('propose')">相談</button>
+      <button id="fw-md-apply" class="modebtn" onclick="setMode('apply')">実行</button>
+    </div>
+    <select id="fw-engine" onchange="onEngineChange()" title="AIエンジン">
+      <option value="claude">🤖 Claude</option>
+      <option value="grok">🛠 Grok</option>
+      <option value="agy">🚀 AGY</option>
+    </select>
+    <select id="fw-model"></select>
+    <select id="fw-target" style="flex:1;min-width:0"></select>
+    <button class="modebtn" onclick="resetChat()">新規</button>
+  </div>
+  <div class="fw-thread thread-host" id="fw-thread"></div>
+  <div class="fw-in">
+    <textarea id="fw-prompt" placeholder="相談・指示を入力（⌘+Enterで送信）" onkeydown="if((event.metaKey||event.ctrlKey)&&event.key==='Enter')sendChat()"></textarea>
+    <button class="btn save" id="fw-send" onclick="sendChat()">送信</button>
+  </div>
+</div>
+<button class="fab" id="fab" onclick="toggleWidget()" aria-label="マネージャー">
+  <span class="ring"></span>
+  <span class="dot" id="fab-dot"></span>
+  <svg class="mascot" viewBox="0 0 48 48" fill="none">
+    <g class="body">
+      <path d="M15 13 l-3.5 -7 l8 3.5 z" fill="#fff"/>
+      <path d="M33 13 l3.5 -7 l-8 3.5 z" fill="#fff"/>
+      <rect x="9.5" y="12" width="29" height="26" rx="12" fill="#fff"/>
+      <g class="asleep">
+        <path d="M15.5 25 q3.5 3 7 0" stroke="#c96442" stroke-width="2.2" stroke-linecap="round"/>
+        <path d="M25.5 25 q3.5 3 7 0" stroke="#c96442" stroke-width="2.2" stroke-linecap="round"/>
+        <path d="M21 31 q3 1.6 6 0" stroke="#c96442" stroke-width="1.6" stroke-linecap="round"/>
+      </g>
+      <g class="awake">
+        <circle cx="19" cy="25" r="2.6" fill="#c96442"/>
+        <circle cx="29" cy="25" r="2.6" fill="#c96442"/>
+        <path d="M20.5 31 q3.5 3 7 0" stroke="#c96442" stroke-width="1.8" stroke-linecap="round"/>
+      </g>
+    </g>
+    <text class="zzz" x="36" y="13" font-size="11" font-weight="700" fill="#fff">z</text>
+  </svg>
+</button>
+
+<script>
+const META = {
+  home:     { title:"ホーム",        desc:"ClaudeManager が保持するアーティファクトの紹介", search:false },
+  skills:   { title:"スキル",        desc:"ローカル及びプラグインのスキル定義", search:true,  create:"skill" },
+  agents:   { title:"サブエージェント", desc:"利用可能なサブエージェント定義",     search:true,  create:"agent" },
+  projects: { title:"プロジェクト",    desc:"各プロジェクトの概要・ロードマップ・課題", search:true },
+  config:   { title:"設定",          desc:"全体指示（CLAUDE.md）と settings.json", search:false },
+  sessions: { title:"セッション",     desc:"進行中・最近のClaude Codeセッションの可視化と参加", search:false },
+  routines: { title:"ルーチン",       desc:"バックグラウンド・エージェントの稼働状況とルーチン最終実行", search:false },
+  stats:    { title:"ダッシュボード",   desc:"全機能の概要 — 稼働状況・セッション・プロジェクト・連携", search:false },
+};
+const CREATE_HINT = {
+  skill: "~/.claude/skills/<名前>/SKILL.md を雛形付きで作成します。",
+  agent: "~/.claude/agents/<名前>.md を雛形付きで作成します。",
+  memory:"このプロジェクトの memory に新しいメモリを作成します。",
+};
+let active = "skills", cache = {}, curPath = null, filterText = "";
+
+// リモート公開時のトークンをURLから取得し、全API呼び出しに付与
+const TOKEN = new URLSearchParams(location.search).get("token");
+const api = (url, opts={}) => {
+  const headers = { ...(opts.headers||{}) };
+  if (TOKEN) headers["x-cc-token"] = TOKEN;
+  return fetch(url, { ...opts, headers });
+};
+
+const esc = s => (s||"").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// ── ラインアイコン（絵文字の代替・currentColorで統一） ──
+const ICONS = {
+  zap:'<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+  hex:'<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>',
+  folder:'<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
+  msg:'<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/>',
+  link:'<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  inbox:'<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  compass:'<circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>',
+  bulb:'<path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2v.3h6v-.3c0-.8.4-1.5 1-2A7 7 0 0 0 12 2z"/>',
+  check:'<polyline points="20 6 9 17 4 12"/>',
+};
+function ic(name,size=20){ const p=ICONS[name]||''; return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;flex-shrink:0">${p}</svg>`; }
+const badge = src => src==="local" ? "local" : src==="user" ? "user" : "plugin";
+const srcLabel = src => src.startsWith("plugin:") ? src.slice(7) : src;
+
+async function go(tab) {
+  active = tab; filterText = "";
+  document.querySelectorAll(".navitem").forEach(n => n.classList.toggle("active", n.dataset.tab===tab));
+  document.getElementById("ttl").textContent = META[tab].title;
+  document.getElementById("desc").textContent = META[tab].desc;
+  document.getElementById("newbtn").style.display = META[tab].create ? "block" : "none";
+  const c = document.getElementById("content");
+  c.innerHTML = '<div class="empty">読み込み中…</div>';
+  if (tab === "home") {
+    const [skills,agents,projects,sessions,mcp,reqs] = await Promise.all([
+      api('/api/skills').then(r=>r.json()),
+      api('/api/agents').then(r=>r.json()),
+      api('/api/projects').then(r=>r.json()),
+      api('/api/sessions').then(r=>r.json()),
+      api('/api/mcp').then(r=>r.json()).catch(()=>({connected:[],needsAuth:[]})),
+      api('/api/requests').then(r=>r.json()).catch(()=>({requests:[]})),
+    ]);
+    cache.skills=skills; cache.agents=agents; cache.projects=projects; cache.sessions=sessions; cache.mcp=mcp; cache.requests=(reqs&&reqs.requests)||[];
+    return drawHome();
+  }
+  if (tab === "sessions") {
+    cache.sessions = await (await api(`/api/sessions`)).json();
+    return drawSessions();
+  }
+  if (tab === "routines") {
+    cache.routines = await (await api(`/api/routines`)).json();
+    return drawRoutines();
+  }
+  if (tab === "stats") {
+    const [stats,sessions,projects,skills,agents,mcp,reqs] = await Promise.all([
+      api('/api/stats').then(r=>r.json()),
+      api('/api/sessions').then(r=>r.json()),
+      api('/api/projects').then(r=>r.json()),
+      api('/api/skills').then(r=>r.json()),
+      api('/api/agents').then(r=>r.json()),
+      api('/api/mcp').then(r=>r.json()).catch(()=>({connected:[],needsAuth:[]})),
+      api('/api/requests').then(r=>r.json()).catch(()=>({requests:[]})),
+    ]);
+    cache.stats=stats; cache.sessions=sessions; cache.projects=projects; cache.skills=skills; cache.agents=agents; cache.mcp=mcp; cache.requests=(reqs&&reqs.requests)||[];
+    return drawDashboard();
+  }
+  if (!cache[tab]) cache[tab] = await (await api(`/api/${tab}`)).json();
+  draw();
+}
+
+function counts() {
+  for (const t of ["skills","agents","projects","sessions"]) {
+    const el = document.getElementById("ct-"+t);
+    if (el && Array.isArray(cache[t])) el.textContent = cache[t].length;
+  }
+}
+const ago = (iso) => {
+  if (!iso) return "";
+  const s = Math.floor((Date.now()-new Date(iso))/1000);
+  if (s<60) return s+"秒前"; if (s<3600) return Math.floor(s/60)+"分前";
+  if (s<86400) return Math.floor(s/3600)+"時間前"; return Math.floor(s/86400)+"日前";
+};
+const baseName = p => (p||"").split("/").filter(Boolean).pop() || p;
+
+function applyFilter(){ filterText = document.getElementById("search").value.toLowerCase().trim(); draw(); }
+
+function draw() {
+  counts();
+  if (active === "home")    return drawHome();
+  if (active === "stats")   return drawDashboard();
+  if (active === "config")  return drawConfig(cache.config);
+  if (active === "projects")return drawProjects(cache.projects);
+  if (active === "agents")  return drawAgents(cache.agents);
+  if (active === "skills")  return drawSkills(cache.skills);
+  drawList(cache[active]);
+}
+
+function drawConfig(d) {
+  const c = document.getElementById("content");
+  c.innerHTML = `<div class="list">` + (d.items||[]).map(it => `
+    <div class="rowitem" style="grid-template-columns:1fr auto" onclick="openFile('${esc(it.path)}','${esc(it.name)}',{deletable:false})">
+      <div class="nm"><span class="badge ${it.kind==='json'?'plugin':'local'}">${it.kind}</span><span class="label">${esc(it.name)}</span></div>
+      <div class="act" style="opacity:1;color:${it.exists?'var(--faint)':'var(--accent)'}">${it.exists?'編集 →':'未作成'}</div>
+    </div>`).join("") + `</div>
+    <p style="color:var(--faint);font-size:12px;margin-top:14px;line-height:1.7">CLAUDE.md は全プロジェクト共通の指示。settings.json はモデル・権限・フック等の設定。編集時は保存前に自動で .bak を退避します。</p>`;
+}
+
+/* ── フローティング・オペレーター（会話＋活動ログ） ── */
+let chat = { sessionId: null, messages: [], busy:false, busyMsg:"" };
+let asMode = "propose";
+let widgetOpen = false;
+function newSessionId(){ return (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c==='x'?r:(r&3|8)).toString(16);})); }
+
+function fillWidgetTargets(){
+  const sel=document.getElementById("fw-target"); if(!sel) return;
+  const projects=(cache.projects||[]).filter(p=>p.hasProjectDir);
+  sel.innerHTML=`<option value="config">Claude設定</option>`+projects.map(p=>`<option value="project::${esc(p.path)}">${esc(baseName(p.path))}</option>`).join("");
+}
+
+// ── エンジン切り替え時にモデル選択肢を連動 ──
+const ENGINE_MODELS = {
+  claude: [{v:"haiku",l:"Haiku"},{v:"sonnet",l:"Sonnet"},{v:"opus",l:"Opus"}],
+  grok:   [{v:"grok-3",l:"Grok 3"},{v:"grok-3-mini",l:"Grok 3 Mini"},{v:"grok-2-latest",l:"Grok 2"}],
+  agy:    [{v:"gemini-2.5-pro",l:"Gemini 2.5 Pro"},{v:"gemini-2.5-flash",l:"Gemini 2.5 Flash"},{v:"gemini-2.0-flash",l:"Gemini 2.0 Flash"}],
+};
+function onEngineChange(){
+  const engine = document.getElementById("fw-engine").value;
+  const sel = document.getElementById("fw-model");
+  const models = ENGINE_MODELS[engine] || ENGINE_MODELS.claude;
+  sel.innerHTML = models.map(m => `<option value="${m.v}">${m.l}</option>`).join("");
+  // セッション履歴はClaude固有のためリセット
+  if (engine !== "claude" && chat.sessionId) {
+    chat.sessionId = null;
+    logActivity(`⚡ エンジンを ${engine.toUpperCase()} に切り替えました（セッションはリセット）`);
+  }
+}
+// 初期表示時にモデルリストをセット
+onEngineChange();
+
+function toggleWidget(force){
+  widgetOpen = (force===undefined) ? !widgetOpen : !!force;
+  document.getElementById("fw").classList.toggle("on", widgetOpen);
+  if(widgetOpen){ document.getElementById("fab").classList.remove("has-unseen"); chat.unseen=0; updateDot();
+    fillWidgetTargets(); renderThread(); setTimeout(()=>document.getElementById("fw-prompt")?.focus(),50); }
+}
+function updateDot(){ const d=document.getElementById("fab-dot"); if(d){ d.textContent=chat.unseen||""; document.getElementById("fab").classList.toggle("has-unseen", !!chat.unseen); } }
+function setBusy(on,msg){
+  chat.busy=on; chat.busyMsg=msg||"";
+  document.getElementById("fab")?.classList.toggle("busy",on);
+  document.getElementById("fw-head")?.classList.toggle("busy",on);
+  renderThread();
+}
+function setMode(m){ asMode=m; const a=document.getElementById("fw-md-apply"),p=document.getElementById("fw-md-propose"); if(a&&p){a.classList.toggle("on",m==="apply");p.classList.toggle("on",m==="propose");} }
+function resetChat(){ chat={sessionId:null,messages:[],busy:false,busyMsg:"",unseen:0}; updateDot(); renderThread(); }
+
+// 各メニューの操作をオペレーターに記録（溜まる）
+function logActivity(text){
+  chat.messages.push({role:"system",text});
+  if(!widgetOpen){ chat.unseen=(chat.unseen||0)+1; updateDot(); }
+  renderThread();
+}
+
+function renderThread(){
+  const t = document.getElementById("fw-thread"); if(!t) return;
+  if (!chat.messages.length && !chat.busy){ t.innerHTML = `<div class="empty" style="padding:34px;font-size:13px">相談や指示をどうぞ。<br>各メニューの操作もここに記録されます。</div>`; return; }
+  t.innerHTML = chat.messages.map((m,i)=>{
+    if (m.role==="system") return `<div style="margin:6px 8px;font-size:11.5px;color:var(--muted);display:flex;gap:6px;align-items:center"><span style="width:5px;height:5px;border-radius:50%;background:var(--faint);flex-shrink:0"></span><span>${esc(m.text)}</span></div>`;
+    if (m.role==="user") return `<div style="display:flex;justify-content:flex-end;margin:8px"><div style="background:var(--accent-soft);border:1px solid var(--accent-line);border-radius:12px 12px 4px 12px;padding:8px 12px;font-size:13px;max-width:85%;white-space:pre-wrap">${esc(m.text)}</div></div>`;
+    // フォールバックボタン（エラー時のみ表示）
+    let fallbackHtml = "";
+    if (m.isError && m.engine === "claude") {
+      fallbackHtml = `<div style="margin-top:8px;padding:8px 10px;background:#fbeae6;border:1px solid #eccabf;border-radius:9px;font-size:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="color:#b3402a;font-weight:600">⚠ Claudeでエラーが発生しました</span>
+        <button class="modebtn" style="border-color:#5c8a5a;color:#5c8a5a" onclick="retryWithEngine('grok',${i})">🛠 Grokで再試行</button>
+        <button class="modebtn" style="border-color:#5a76b8;color:#5a76b8" onclick="retryWithEngine('agy',${i})">🚀 AGYで再試行</button>
+      </div>`;
+    }
+    const applyBtn = (m.mode==="propose" && m.canApply) ? `<div style="margin-top:7px"><button class="modebtn" style="border-color:var(--accent);color:var(--accent)" onclick="applyProposal(${i})">この案で実行</button></div>` : "";
+    const engineLabel = m.engine && m.engine !== "claude" ? ` [${m.engine.toUpperCase()}]` : "";
+    return `<div style="margin:8px"><div style="font-size:9.5px;color:var(--faint);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">${esc((m.model||""))}${engineLabel} · ${m.mode==="apply"?"実行":"相談"}</div><div style="background:var(--surface-2);border:1px solid var(--border);border-radius:12px 12px 12px 4px;padding:10px 13px;font-size:13px;white-space:pre-wrap;line-height:1.65">${esc(m.text)||"(出力なし)"}</div>${applyBtn}${fallbackHtml}</div>`;
+  }).join("") + (chat.busy?`<div style="margin:10px 8px;color:var(--accent);font-size:12.5px;display:flex;align-items:center;gap:8px"><span style="width:12px;height:12px;border:2px solid var(--accent-line);border-top-color:var(--accent);border-radius:50%;display:inline-block;animation:spin .8s linear infinite"></span>${esc(chat.busyMsg||"作業中…")}</div>`:"");
+  t.scrollTop = t.scrollHeight;
+}
+
+function targetBody(){
+  const tv=document.getElementById("fw-target").value, isProj=tv.startsWith("project::");
+  return { target:isProj?"project":"config", cwd:isProj?tv.slice(9):undefined };
+}
+async function sendChat(){
+  const ta=document.getElementById("fw-prompt"); const prompt=ta.value.trim(); if(!prompt) return;
+  ta.value=""; await runChat(prompt, asMode);
+}
+async function applyProposal(i){
+  const userMsg = chat.messages.slice(0,i).reverse().find(m=>m.role==="user");
+  await runChat((userMsg?userMsg.text:"前の提案を実行して"), "apply");
+}
+// フォールバック再試行（エラーメッセージの直前のユーザー発言を取得して別エンジンで実行）
+async function retryWithEngine(engine, msgIdx){
+  const userMsg = chat.messages.slice(0,msgIdx).reverse().find(m=>m.role==="user");
+  if (!userMsg) return;
+  // エンジン切り替え
+  document.getElementById("fw-engine").value = engine;
+  onEngineChange();
+  logActivity(`⚡ ${engine.toUpperCase()} に切り替えて再試行します`);
+  await runChat(userMsg.text, asMode, engine);
+}
+async function runChat(prompt, mode, forceEngine){
+  if(!widgetOpen) toggleWidget(true);
+  const engine = forceEngine || document.getElementById("fw-engine").value;
+  const model=document.getElementById("fw-model").value; const tb=targetBody();
+  const isNew = !chat.sessionId; if(isNew && engine === "claude") chat.sessionId=newSessionId();
+  chat.messages.push({role:"user",text:prompt});
+  const engineLabel = engine !== "claude" ? ` [${engine.toUpperCase()}]` : "";
+  setBusy(true,`${model}${engineLabel} が${mode==="apply"?"作業":"検討"}中…`);
+  document.getElementById("fw-send").disabled=true;
+  try{
+    const body={prompt,model,mode,...tb,sessionId:chat.sessionId,isNew,engine};
+    const j=await (await api("/api/assistant",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})).json();
+    if(!j.ok){ chat.messages.push({role:"assistant",text:"エラー: "+j.error,mode,model,engine,isError:true}); }
+    else{
+      chat.messages.push({role:"assistant",text:j.output,mode:j.mode,model:j.model,engine:j.engine||engine,canApply:j.mode==="propose"});
+      if(j.mode==="apply"){ cache.skills=null;cache.agents=null;cache.projects=null; if(active&&META[active]) go(active); }
+    }
+  }catch(e){ chat.messages.push({role:"assistant",text:"通信エラー: "+e.message,mode,model,engine,isError:true}); }
+  setBusy(false); document.getElementById("fw-send").disabled=false;
+}
+
+/* ── Sessions（可視化・参加）── */
+let curSession = null;
+function drawSessions(){
+  const c=document.getElementById("content");
+  const list=cache.sessions||[];
+  if(!list.length){ c.innerHTML=`<div class="empty">セッション記録がありません</div>`; return; }
+  // プロジェクトごとにグループ化（紐付けを重視）
+  const groups={};
+  list.forEach((s,i)=>{ const k=s.project||"（その他）"; (groups[k]=groups[k]||[]).push({s,i}); });
+  const order=Object.keys(groups).sort((a,b)=> (groups[b][0].s.mtime)-(groups[a][0].s.mtime));
+  c.innerHTML = order.map(proj=>`
+    <div class="sess-grp-h">${esc(proj)} <span style="color:var(--faint);font-weight:400">${groups[proj].length}</span></div>
+    <div class="card-grid">${groups[proj].map(({s,i})=>`
+      <div class="scard" onclick="openSession(${i})">
+        <div class="scard-h">
+          <div style="min-width:0;display:flex;align-items:center;gap:8px">
+            <span style="width:8px;height:8px;flex-shrink:0;border-radius:50%;background:${s.active?'var(--ok)':'var(--faint)'};${s.active?'box-shadow:0 0 5px var(--ok)':''}"></span>
+            <span class="scard-nm">${esc(s.title||baseName(s.cwd)||s.id.slice(0,8))}</span>
+          </div>
+          <span style="font-size:11px;color:var(--faint);white-space:nowrap;flex-shrink:0">${ago(s.lastAt)}</span>
+        </div>
+        ${s.last&&s.last.text?`<div class="scard-d" style="-webkit-line-clamp:2;margin-top:4px">${esc(s.last.text)}</div>`:''}
+        <div style="font-size:11px;color:var(--faint);margin-top:8px;display:flex;gap:10px;align-items:center">
+          <span>${s.events}件のやりとり</span>
+          ${s.active?'<span style="color:var(--ok);font-weight:600">● 進行中</span>':''}
+        </div>
+      </div>
+    `).join("")}</div>
+  `).join("");
+}
+async function openSession(i){
+  const s=cache.sessions[i]; curSession=s;
+  const c=document.getElementById("content");
+  c.innerHTML=`<div class="lp">
+    <button class="linkbtn" onclick="go('sessions')" style="margin-bottom:14px">← 一覧へ</button>
+    <div class="lp-hero">
+      <div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.04em">${esc(s.project||'セッション')}</div>
+      <h1 class="lp-title" style="margin-top:4px">${esc(s.title||baseName(s.cwd)||s.id.slice(0,8))}</h1>
+      <div class="lp-path">${esc(s.cwd||"")} · ${ago(s.lastAt)}${s.active?' · <span style="color:var(--ok);font-weight:600">進行中</span>':''}</div>
+    </div>
+    <div class="rs-bar">
+      <input id="rs-prompt" placeholder="このセッションを続ける… メッセージを入力" onkeydown="if(event.key==='Enter')resumeSession()" />
+      <select id="rs-model"><option value="haiku">Haiku</option><option value="sonnet">Sonnet</option><option value="opus">Opus</option></select>
+      <label class="rs-edit" title="編集も許可"><input type="checkbox" id="rs-apply"> 編集</label>
+      <button class="btn save" id="rs-send" onclick="resumeSession()">送信</button>
+    </div>
+    <div id="rs-out" style="margin:0 0 14px"></div>
+    <div id="sess-summary"><div class="lp-card"><div style="color:var(--muted);font-size:13px">作業ログを集計中…</div></div></div>
+    <details class="lp-card" style="padding:0">
+      <summary style="padding:14px 20px;cursor:pointer;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;list-style:none">会話の生ログを見る</summary>
+      <div id="sess-conv" style="padding:0 20px 18px"><div style="color:var(--muted);font-size:13px">読み込み中…</div></div>
+    </details>
+  </div>`;
+  const j=await (await api(`/api/session?key=${encodeURIComponent(s.key)}&id=${encodeURIComponent(s.id)}`)).json();
+  const sum=document.getElementById("sess-summary");
+  if(j.ok && j.digest){ sum.innerHTML=renderDigest(j.digest, s); }
+  else if(sum){ sum.innerHTML=`<div class="lp-card"><div style="color:#b3402a">${esc(j.error||'集計できませんでした')}</div></div>`; }
+  const conv=document.getElementById("sess-conv");
+  if(conv){
+    conv.innerHTML=(j.ok&&j.events&&j.events.length)?j.events.map(e=>`
+      <div style="margin:8px 0;padding-bottom:8px;border-bottom:1px solid var(--border)">
+        <div style="font-size:10px;font-weight:700;color:${e.role==='user'?'var(--accent)':'var(--info)'};text-transform:uppercase;margin-bottom:3px">${e.role}${e.tools&&e.tools.length?' · '+esc(e.tools.join(", ")):''}</div>
+        <div style="font-size:12.5px;line-height:1.6;white-space:pre-wrap;color:var(--text)">${esc(e.text)||(e.tools&&e.tools.length?'['+esc(e.tools.join(", "))+']':'—')}</div>
+      </div>`).join(""):`<div style="color:var(--faint);font-size:13px">テキストイベントなし</div>`;
+  }
+}
+
+// セッション要約を更新ログ風にレンダリング（何を・どう変えたか／スキル・サブエージェント利用）
+function renderDigest(d, s){
+  const dur = (d.start&&d.end) ? Math.max(1,Math.round((new Date(d.end)-new Date(d.start))/60000)) : null;
+  const chip = (label,val,color)=>`<span class="d-chip" style="${color?`border-color:${color};color:${color}`:''}">${esc(label)}${val!=null?` <b>${val}</b>`:''}</span>`;
+  // 変更ファイル（更新ログの本体）
+  const changes = (d.changes||[]).length ? `
+    <div class="lp-card">
+      <div class="lp-h">プロジェクトへの変更 <span class="pj-src">${d.changes.length}ファイル</span></div>
+      <div class="d-changes">${d.changes.map(ch=>`
+        <div class="d-change">
+          <span class="d-act ${d.creates&&d.creates.includes(ch.name)?'new':'edit'}">${d.creates&&d.creates.includes(ch.name)?'新規':'変更'}</span>
+          <span class="d-file">${esc(ch.name)}</span>
+          ${ch.count>1?`<span class="d-cnt">×${ch.count}</span>`:''}
+        </div>`).join("")}</div>
+    </div>` : `<div class="lp-card"><div class="lp-h">プロジェクトへの変更</div><div style="color:var(--faint);font-size:12.5px">ファイル変更なし（調査・相談中心のセッション）</div></div>`;
+  // スキル / サブエージェント利用の可視化
+  const usedSkills=(d.skills||[]), usedAgents=(d.agents||[]);
+  const usage = (usedSkills.length||usedAgents.length) ? `
+    <div class="lp-card">
+      <div class="lp-h">使用したスキル・サブエージェント</div>
+      <div class="pj-tags">
+        ${usedSkills.map(x=>`<span class="pj-tag" style="display:inline-flex;align-items:center;gap:4px;background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent)">${ic('zap',13)}${esc(x.name)}${x.count>1?` ×${x.count}`:''}</span>`).join("")}
+        ${usedAgents.map(x=>`<span class="pj-tag" style="display:inline-flex;align-items:center;gap:4px;background:#e9edf6;border-color:#cdd8ee;color:var(--info)">${ic('hex',13)}${esc(x.name)}${x.count>1?` ×${x.count}`:''}</span>`).join("")}
+      </div>
+    </div>` : '';
+  // 決定事項を機能エリア（主語）ごとにグルーピングして羅列
+  const grp = (d.decisionGroups&&d.decisionGroups.length) ? d.decisionGroups
+            : ((d.decisions||[]).length?[{area:"変更内容",items:d.decisions}]:[]);
+  const decisions = grp.length ? `
+    <div class="lp-card">
+      <div class="lp-h">決定・実施したこと <span class="pj-src">${(d.decisions||[]).length}件</span></div>
+      ${grp.map(g=>`
+        <div class="d-grp">
+          <div class="d-grp-h">${esc(s.project||'')}<span style="color:var(--faint)"> ／ </span>${esc(g.area)}</div>
+          <div class="d-decs">${g.items.map(x=>`<div class="d-dec"><span class="d-check">✓</span><span>${esc(x)}</span></div>`).join("")}</div>
+        </div>`).join("")}
+    </div>` : '';
+  // マネージャー提案（スキル化など。サーバー判定があればそれを優先）
+  const sg = d.suggest;
+  const sgText = sg ? sg.text : 'この作業の続き・要約・改善をマネージャーに相談できます。';
+  const ctx = {goal:d.firstAsk||"", decisions:(d.decisions||[]).slice(0,12), changes:(d.changes||[]).map(c=>c.name), kind:(sg&&sg.kind)||""};
+  const propose = `
+    <div class="lp-card" style="background:linear-gradient(180deg,var(--accent-soft),var(--surface));border-color:var(--accent-line)">
+      <div class="lp-h">マネージャーからの提案</div>
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <span style="color:var(--accent);display:flex">${ic('bulb',18)}</span>
+        <div style="font-size:13.5px;line-height:1.75;color:var(--text)">${esc(sgText)}${sg?' 必要ならスキル化を相談してね。':''}</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+        <button class="btn save" onclick='proposeSkill(${JSON.stringify(ctx)})'>${sg?'スキル化を相談':'これをスキル化を相談'}</button>
+        <button class="btn cancel" onclick='consultSession(${JSON.stringify({goal:d.firstAsk||"",last:d.lastText||""})})'>続き・要約を相談</button>
+      </div>
+    </div>`;
+  return `
+    <div class="lp-card">
+      <div class="lp-h">サマリー</div>
+      <div class="d-chips">
+        ${chip('やりとり', s.events)}
+        ${dur!=null?chip('作業時間', dur+'分'):''}
+        ${chip('変更', (d.changes||[]).length+'件')}
+        ${usedSkills.length?chip('スキル', usedSkills.length, 'var(--accent)'):''}
+        ${usedAgents.length?chip('サブエージェント', usedAgents.length, 'var(--info)'):''}
+      </div>
+      ${d.firstAsk?`<div style="font-size:14px;line-height:1.7;margin-top:12px"><span style="color:var(--faint);font-size:11px;font-weight:700">目的</span><br>${esc(d.firstAsk)}</div>`:''}
+      ${d.lastText?`<div style="font-size:13px;line-height:1.7;margin-top:12px;color:var(--muted)"><span style="color:var(--faint);font-size:11px;font-weight:700">最後の状況</span><br>${esc(d.lastText)}</div>`:''}
+    </div>
+    ${decisions}${changes}${usage}${propose}`;
+}
+function proposeSkill(ctx){
+  toggleWidget(true); setMode('propose');
+  const ta=document.getElementById("fw-prompt");
+  const decs=(ctx.decisions||[]).slice(0,10).map(x=>"・"+x).join("\n");
+  if(ta){ ta.value=`このセッションの手順をスキル化したいです。\n目的: ${ctx.goal}\n決定・実施したこと:\n${decs}\n変更ファイル: ${(ctx.changes||[]).join(", ")}\n\nこの一連の流れを再利用可能なスキル（~/.claude/skills/）にまとめる提案をしてください。スキル名・説明・手順の雛形を示し、良ければ作成してください。`; ta.focus(); }
+}
+function consultSession(ctx){
+  toggleWidget(true); setMode('propose');
+  const ta=document.getElementById("fw-prompt");
+  if(ta){ ta.value=`前回セッションの続きを相談したいです。\n目的: ${ctx.goal}\n直近の状況: ${ctx.last}\n\n要約と、次にやるべきことを提案してください。`; ta.focus(); }
+}
+async function resumeSession(){
+  const prompt=document.getElementById("rs-prompt").value.trim(); if(!prompt||!curSession) return;
+  const model=document.getElementById("rs-model").value, apply=document.getElementById("rs-apply").checked;
+  const out=document.getElementById("rs-out"), btn=document.getElementById("rs-send");
+  btn.disabled=true; out.innerHTML=`<div style="color:var(--muted);font-size:13px">送信中…</div>`;
+  try{
+    const j=await (await api("/api/session/resume",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:curSession.id,cwd:curSession.cwd,prompt,model,apply})})).json();
+    out.innerHTML=j.ok?`<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:11px;font-size:13px;white-space:pre-wrap;line-height:1.6">${esc(j.output)||"(出力なし)"}</div>`:`<div style="color:#b3402a">${esc(j.error)}</div>`;
+  }catch(e){ out.innerHTML=`<div style="color:#b3402a">通信エラー: ${esc(e.message)}</div>`; }
+  btn.disabled=false;
+}
+
+function match(...fields){ return !filterText || fields.some(f => (f||"").toLowerCase().includes(filterText)); }
+
+let jaMode = false;           // 日本語表示（既定OFF＝Claude枠を使わない。押した時だけ翻訳）
+const jaCache = {};           // 原文→日本語
+function isEnglish(t){ return t && !/[ぁ-んァ-ヶ一-龥]/.test(t); }
+function dispDesc(t){ return (jaMode && jaCache[t]) ? jaCache[t] : (t||""); }
+
+function drawList(data) {
+  const c = document.getElementById("content");
+  const rows = (data||[]).filter(s => match(s.name, s.description, s.source));
+  const needTrans = rows.some(s => isEnglish(s.description) && !jaCache[s.description]);
+  if (!rows.length) { c.innerHTML = `<div class="empty">${filterText?"該当なし":"項目がありません"}</div>`; return; }
+  c.innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+      <button class="modebtn ${jaMode?'on':''}" onclick="toggleJa()">日本語で表示</button>
+    </div>
+    <div class="card-grid">${rows.map(s => `
+      <div class="scard" onclick="openFile('${esc(s.path)}','${esc(s.name)}',{deletable:${s.source==='local'||s.source==='user'}})">
+        <div class="scard-h"><span class="scard-nm">${esc(s.name)}</span><span class="badge ${badge(s.source)}">${esc(srcLabel(s.source))}</span></div>
+        <div class="scard-d">${esc(dispDesc(s.description))||'<span style="color:var(--faint)">説明なし</span>'}</div>
+      </div>`).join("")}</div>`;
+  if (jaMode && needTrans) translateVisible(rows);
+}
+function toggleJa(){ jaMode=!jaMode; draw(); }
+async function translateVisible(rows){
+  const texts = [...new Set(rows.map(s=>s.description).filter(t=>isEnglish(t)&&!jaCache[t]))];
+  if(!texts.length) return;
+  try{
+    const j = await (await api("/api/translate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({texts})})).json();
+    if(j.ok && Array.isArray(j.translations)){ texts.forEach((t,i)=>{ if(j.translations[i]) jaCache[t]=j.translations[i]; }); if(active==='skills'||active==='agents') draw(); }
+  }catch{}
+}
+
+/* ── 並べ替え（カード共通） ── */
+let sortMode = { skills:"usage", agents:"usage" };
+function setSort(view, mode){ sortMode[view]=mode; draw(); }
+function sortCards(rows, view){
+  const m=sortMode[view]||"usage";
+  const a=[...rows];
+  if(m==="name") a.sort((x,y)=>(x.name||"").localeCompare(y.name||""));
+  else if(m==="source") a.sort((x,y)=>(x.source||"").localeCompare(y.source||"")|| (y.usageCount||0)-(x.usageCount||0));
+  else a.sort((x,y)=>(y.usageCount||0)-(x.usageCount||0));
+  return a;
+}
+function sortBar(view){
+  const m=sortMode[view]||"usage";
+  const opt=(v,l)=>`<button class="modebtn ${m===v?'on':''}" onclick="setSort('${view}','${v}')">${l}</button>`;
+  return `<div style="display:flex;gap:6px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+    <span style="font-size:11px;color:var(--faint);font-weight:600">並べ替え</span>
+    ${opt('usage','利用が多い順')}${opt('name','名前順')}${opt('source','種類順')}</div>`;
+}
+
+/* ── スキル（日本語名・解説・利用統計） ── */
+const SKILL_CAT = {
+  "image-gen":{ja:"画像生成",d:"grok / agy のCLIで画像を生成（STEPNアイキャッチ・MV素材・キャラ画像など）。従量課金なし、ログインのみ。",best:"アイキャッチやSNS画像をサッと作りたい時",ex:"STEPNの記事用アイキャッチを1枚作って"},
+  "mv-maker":{ja:"リリックMV制作",d:"曲＋歌詞＋参照画像から、ffmpegで映画的なリリックMVを書き出す（横16:9／縦9:16）。Ken Burns＋クロスフェード＋歌詞アニメ。",best:"楽曲のMV・歌詞動画を作りたい時",ex:"この曲と歌詞でリリックMVを作って"},
+  "update-config":{ja:"設定の自動化",d:"settings.json を編集してフック・権限・env等を設定。「毎回〜したら」のような自動挙動はここで実現。",best:"コマンド許可の追加や自動フックを設定したい時",ex:"npmコマンドを常に許可して"},
+  "schedule":{ja:"定期実行ルーチン",d:"cronで動く定期エージェント（ルーチン）の作成・一覧・実行。",best:"毎朝PRチェックなど定例作業を自動化したい時",ex:"毎朝9時にPRをチェックするルーチンを作って"},
+  "loop":{ja:"繰り返し実行",d:"プロンプトやスラッシュコマンドを一定間隔で繰り返す。",best:"5分ごとに状態を見張る等",ex:"5分ごとにデプロイ状況を確認して"},
+  "code-review":{ja:"コードレビュー",d:"現在の差分をレビューしてバグや改善点を指摘。",best:"コミット前に変更を点検したい時",ex:"いまの変更をレビューして"},
+  "verify":{ja:"動作検証",d:"実際にアプリを動かして変更が機能するか確認。",best:"修正が本当に効いているか確かめたい時",ex:"この修正が動くか検証して"},
+  "run":{ja:"アプリ起動",d:"プロジェクトのアプリを起動して動作を確認。",best:"画面で動かして確認したい時",ex:"このアプリを起動して"},
+  "simplify":{ja:"コード簡素化",d:"変更箇所を再利用・簡素化の観点で整理（バグ探しではない）。",best:"書いたコードを整理したい時",ex:"この差分を簡素化して"},
+  "security-review":{ja:"セキュリティ点検",d:"ブランチの変更にセキュリティレビューを実施。",best:"公開前に脆弱性を点検したい時",ex:"この変更のセキュリティを点検して"},
+  "init":{ja:"CLAUDE.md作成",d:"コードベースを調べて CLAUDE.md を生成。",best:"新規プロジェクトの指示書を作りたい時",ex:"このリポジトリのCLAUDE.mdを作って"},
+  "claude-api":{ja:"Claude APIリファレンス",d:"モデルID・料金・ツール使用などClaude API/SDKの参照。",best:"AI機能を実装する時の確認に",ex:"最新モデルの料金を教えて"},
+};
+function skillInfo(s){ const k=SKILL_CAT[s.name]||{}; return {ja:k.ja||s.name, d:k.d||s.description||"", best:k.best||"", ex:k.ex||""}; }
+
+function drawSkills(data){
+  const c=document.getElementById("content");
+  const rows=sortCards((data||[]).filter(s=>match(s.name,s.description)),"skills");
+  window._skillList=rows;
+  c.innerHTML=`
+    <div class="panel" style="border-color:var(--accent-line);background:linear-gradient(180deg,var(--accent-soft),var(--surface))">
+      <h3 style="margin-bottom:8px">スキルとは</h3>
+      <p style="font-size:13px;line-height:1.8;margin:0">よく使う手順に名前をつけて<b>一発で呼べる</b>ようにした“型”。カードをタップすると<b>使い方・使い所・どのプロジェクトでよく使われたか</b>が見られます。繰り返す作業はスキル化すると毎回の指示が要りません。</p>
+      <button class="btn save" style="margin-top:14px" onclick="proposeSkillNew()">＋ スキルを作る（マネージャーに相談）</button>
+    </div>
+    ${sortBar("skills")}
+    <div class="card-grid">${rows.map((s,i)=>{
+      const info=skillInfo(s); const top=(s.usageProjects||[])[0];
+      return `<div class="scard" onclick="openSkillDetail(${i})">
+        <div class="scard-h">
+          <span class="scard-nm" style="-webkit-line-clamp:1">${esc(info.ja)}</span>
+          <span class="badge ${s.source==='local'?'user':'plugin'}">${esc(s.source==='local'?'自作':'プラグイン')}</span>
+        </div>
+        <div style="font-size:11px;color:var(--faint);font-family:var(--mono);margin:-2px 0 6px">${esc(s.name)}</div>
+        <div class="scard-d" style="-webkit-line-clamp:2">${esc(info.d)||'<span style="color:var(--faint)">説明なし</span>'}</div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:9px;font-size:11px;color:var(--muted)">
+          <span class="d-chip" style="padding:2px 8px">利用 <b>${s.usageCount||0}</b></span>
+          ${top?`<span style="color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">よく使う: ${esc(top.name)}</span>`:''}
+        </div>
+      </div>`;
+    }).join("")}</div>`;
+}
+function openSkillDetail(i){
+  const s=(window._skillList||[])[i]; if(!s) return;
+  const info=skillInfo(s);
+  document.getElementById("task-d-title").textContent=info.ja+`（${s.name}）`;
+  const ofb=document.getElementById("task-open-file");
+  ofb.style.display=s.path?"":"none"; ofb.textContent="定義を開く";
+  ofb.setAttribute("onclick","closeTaskModal();openFile(window._lpClaudeMd,window._lpFileTitle||'SKILL.md',{deletable:false})");
+  window._lpClaudeMd=s.path||''; window._lpFileTitle=s.name;
+  const projs=(s.usageProjects||[]);
+  document.getElementById("task-d-body").innerHTML=`
+    <div style="font-size:13.5px;line-height:1.8">${esc(info.d)||'説明なし'}</div>
+    ${info.best?`<div style="margin-top:14px"><div class="lp-h" style="margin-bottom:6px">使い所</div><div style="font-size:13px;line-height:1.7">${esc(info.best)}</div></div>`:''}
+    ${info.ex?`<div style="margin-top:12px"><div class="lp-h" style="margin-bottom:6px">指示の例</div><div style="font-size:12.5px;line-height:1.6;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-style:italic">「${esc(info.ex)}」</div></div>`:''}
+    <div style="margin-top:14px"><div class="lp-h" style="margin-bottom:8px">利用実績 <span class="pj-src">${s.usageCount||0}回</span></div>
+      ${projs.length?`<div class="d-changes">${projs.map(p=>`<div class="d-change"><span class="d-file" style="font-family:var(--sans)">${esc(p.name)}</span><span class="d-cnt">${p.count}回</span></div>`).join("")}</div>`:'<div style="color:var(--faint);font-size:12.5px">まだ使われていません</div>'}
+    </div>`;
+  window._skillDetailIdx=i;
+  const sb=document.getElementById("task-send-btn");
+  sb.setAttribute("onclick","consultSkill()"); sb.textContent="使い方をマネージャーに相談";
+  document.getElementById("taskModal").classList.add("on");
+}
+function consultSkill(){
+  const s=(window._skillList||[])[window._skillDetailIdx]; closeTaskModal(); if(!s) return;
+  const info=skillInfo(s);
+  toggleWidget(true); setMode('propose');
+  const ta=document.getElementById("fw-prompt");
+  if(ta){ ta.value=`スキル「${s.name}（${info.ja}）」の使い方を相談です。\n今のプロジェクトでどう活かせるか、具体的な使い所と指示例をいくつか教えてください。`; ta.focus(); }
+}
+function proposeSkillNew(){
+  toggleWidget(true); setMode('propose');
+  const ta=document.getElementById("fw-prompt");
+  if(ta){ ta.value=`新しいスキルを作りたいです。\nよく繰り返している作業をスキル化したいので、どんなスキルがあると便利か一緒に考えてください。スキル名・説明・手順の雛形（~/.claude/skills/<名前>/SKILL.md）を提案し、良ければ作成までお願いします。`; ta.focus(); }
+}
+
+/* ── サブエージェント（日本語名・使い所・利用統計） ── */
+const AGENT_CAT = {
+  "general-purpose":{ja:"なんでも担当",d:"複雑な調査や多段の作業をまとめて任せる万能エージェント。",best:"大きめの調査・実装をひとまとめに任せたい時",ex:"このリポジトリ全体を調べて認証まわりの実装方針を提案して"},
+  "Explore":{ja:"コード探索",d:"ファイルやシンボルの場所を高速に探す読み取り専用エージェント。枠を温存しつつ「どこにあるか」を素早く特定。",best:"大きいコードベースで該当箇所を探す時",ex:"決済処理を呼んでいる箇所を全部探して"},
+  "Plan":{ja:"設計プランナー",d:"実装の段取り（手順・対象ファイル・トレードオフ）を立てる設計役。書き換えはしない。",best:"着手前に実装方針を固めたい時",ex:"この機能追加の実装プランを立てて"},
+  "claude-code-guide":{ja:"Claude Code案内",d:"Claude Code本体・Agent SDK・APIの使い方に答える案内役。",best:"フック/スラッシュコマンド/MCP設定の疑問",ex:"PreToolUseフックの書き方を教えて"},
+  "statusline-setup":{ja:"ステータスライン設定",d:"Claude Codeのステータス行表示を設定する専用エージェント。",best:"ステータス行をカスタムしたい時",ex:"gitブランチを出すステータスラインにして"},
+  "claude":{ja:"汎用",d:"特定の役割に当てはまらない作業の受け皿。",best:"どれにも当てはまらない雑多な作業",ex:""},
+};
+function agentInfo(a){ const k=AGENT_CAT[a.name]||{}; return {ja:k.ja||a.name, d:k.d||a.description||"", best:k.best||"", ex:k.ex||""}; }
+function srcJa(src){ return src==="user"?"自作":src==="builtin"?"組み込み":src.startsWith("plugin:")?"プラグイン":src; }
+
+function drawAgents(data){
+  const c=document.getElementById("content");
+  const rows=sortCards((data||[]).filter(s=>match(s.name,s.description)),"agents");
+  window._agentList=rows;
+  c.innerHTML=`
+    <div class="panel" style="border-color:var(--accent-line);background:linear-gradient(180deg,var(--accent-soft),var(--surface))">
+      <h3 style="margin-bottom:8px">サブエージェントとは</h3>
+      <p style="font-size:13px;line-height:1.8;margin:0">特定の役割に特化した“別働隊”。重い調査や設計を切り出して任せると、本体の文脈を汚さず並行で進められます。カードをタップすると<b>使い方・使い所・どのプロジェクトでよく使われたか</b>が見られます。</p>
+      <button class="btn save" style="margin-top:14px" onclick="proposeAgent()">＋ サブエージェントを作る（マネージャーに相談）</button>
+    </div>
+    ${sortBar("agents")}
+    <div class="card-grid">${rows.map((a,i)=>{
+      const info=agentInfo(a);
+      const top=(a.usageProjects||[])[0];
+      return `<div class="scard" onclick="openAgentDetail(${i})">
+        <div class="scard-h">
+          <span class="scard-nm" style="-webkit-line-clamp:1">${esc(info.ja)}</span>
+          <span class="badge ${a.source==='user'?'user':a.source==='builtin'?'plugin':'local'}">${esc(srcJa(a.source))}</span>
+        </div>
+        <div style="font-size:11px;color:var(--faint);font-family:var(--mono);margin:-2px 0 6px">${esc(a.name)}</div>
+        <div class="scard-d" style="-webkit-line-clamp:2">${esc(info.d)||'<span style="color:var(--faint)">説明なし</span>'}</div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:9px;font-size:11px;color:var(--muted)">
+          <span class="d-chip" style="padding:2px 8px">利用 <b>${a.usageCount||0}</b></span>
+          ${top?`<span style="color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">よく使う: ${esc(top.name)}</span>`:''}
+        </div>
+      </div>`;
+    }).join("")}</div>`;
+}
+function openAgentDetail(i){
+  const a=(window._agentList||[])[i]; if(!a) return;
+  const info=agentInfo(a);
+  document.getElementById("task-d-title").textContent=info.ja+`（${a.name}）`;
+  const ofb=document.getElementById("task-open-file");
+  ofb.style.display=a.path?"":"none"; ofb.textContent="定義を開く";
+  ofb.setAttribute("onclick","closeTaskModal();openFile(window._lpClaudeMd,window._lpFileTitle||'定義',{deletable:false})");
+  window._lpClaudeMd=a.path||''; window._lpFileTitle=a.name;   // 既存「ファイルを開く」ボタンを流用
+  const projs=(a.usageProjects||[]);
+  document.getElementById("task-d-body").innerHTML=`
+    <div style="font-size:13.5px;line-height:1.8">${esc(info.d)||'説明なし'}</div>
+    ${info.best?`<div style="margin-top:14px"><div class="lp-h" style="margin-bottom:6px">使い所</div><div style="font-size:13px;line-height:1.7">${esc(info.best)}</div></div>`:''}
+    ${info.ex?`<div style="margin-top:12px"><div class="lp-h" style="margin-bottom:6px">指示の例</div><div style="font-size:12.5px;line-height:1.6;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-style:italic">「${esc(info.ex)}」</div></div>`:''}
+    <div style="margin-top:14px"><div class="lp-h" style="margin-bottom:8px">利用実績 <span class="pj-src">${a.usageCount||0}回</span></div>
+      ${projs.length?`<div class="d-changes">${projs.map(p=>`<div class="d-change"><span class="d-file" style="font-family:var(--sans)">${esc(p.name)}</span><span class="d-cnt">${p.count}回</span></div>`).join("")}</div>`:'<div style="color:var(--faint);font-size:12.5px">まだ使われていません</div>'}
+    </div>`;
+  // フッターのボタンを「マネージャーに相談（使い方）」に差し替え
+  window._agentDetailIdx=i;
+  const sb=document.getElementById("task-send-btn");
+  sb.setAttribute("onclick","consultAgent()"); sb.textContent="使い方をマネージャーに相談";
+  document.getElementById("taskModal").classList.add("on");
+}
+function consultAgent(){
+  const a=(window._agentList||[])[window._agentDetailIdx]; closeTaskModal(); if(!a) return;
+  const info=agentInfo(a);
+  toggleWidget(true); setMode('propose');
+  const ta=document.getElementById("fw-prompt");
+  if(ta){ ta.value=`サブエージェント「${a.name}（${info.ja}）」について相談です。\nこのエージェントを今のプロジェクトでどう活かせるか、具体的な使い所と指示例をいくつか教えてください。`; ta.focus(); }
+}
+function proposeAgent(){
+  toggleWidget(true); setMode('propose');
+  const ta=document.getElementById("fw-prompt");
+  if(ta){ ta.value=`新しいサブエージェントを作りたいです。\nどんな役割のエージェントがあると便利か一緒に考えてください。用途・得意分野・使うツール・口調などを整理し、~/.claude/agents/ に置く定義（frontmatter＋本文）の雛形を提案してください。良ければ作成までお願いします。`; ta.focus(); }
+}
+
+function drawProjects(data) {
+  const c = document.getElementById("content");
+  const rows = (data||[]);
+  window._projData = rows;
+  if (!rows.length) { c.innerHTML = `<div class="empty">プロジェクトがありません</div>`; return; }
+  c.innerHTML = `<div class="pgrid">` + rows.map((p,i) => {
+    const rm = p.roadmap, pct = rm && rm.total ? Math.round(rm.done/rm.total*100) : null;
+    const ov = p.overview ? p.overview.text : (rm?'ロードマップあり':'概要なし');
+    return `<div class="pcard-c" onclick="openProject(${i})">
+      <div class="pcard-c-top">
+        <div style="min-width:0">
+          <div class="pcard-c-nm">${esc(p.name)}</div>
+          <div class="meta">${p.sessionCount?`利用 ${p.sessionCount}回`:'未使用'}${p.issues.length?` · <span style="color:var(--accent)">課題 ${p.issues.length}</span>`:''}${p.hasProjectDir?'':' · フォルダ未検出'}</div>
+        </div>
+        ${pct!=null?`<div class="ring" style="--p:${pct}"><span>${pct}%</span></div>`:'<span class="fa">→</span>'}
+      </div>
+      <div class="pcard-c-ov">${esc(ov)}</div>
+    </div>`;
+  }).join("") + `</div>`;
+}
+
+function openProject(i){ drawProjectDetail((window._projData||[])[i]); }
+
+function drawProjectDetail(p){
+  if(!p) return;
+  const c = document.getElementById("content");
+  document.getElementById("ttl").textContent = p.name;
+  document.getElementById("desc").textContent = p.path;
+  const rm = p.roadmap, pct = rm && rm.total ? Math.round(rm.done/rm.total*100) : null;
+  const R=52, C=2*Math.PI*R;
+  window._lpTasks = (rm && rm.pending) || [];
+  window._lpIssues = p.issues || [];
+  window._lpClaudeMd = p.claudeMd || '';
+  window._lpProject = { name: p.name, key: p.key };
+
+  const hero = `<div class="lp-hero">
+    <button class="linkbtn" onclick="go('projects')" style="margin-bottom:14px">← 一覧へ</button>
+    <h1 class="lp-title">${esc(p.name)}</h1>
+    <div class="lp-path">${esc(p.path)}${p.sessionCount?` · 利用 ${p.sessionCount}回`:''}</div>
+    ${p.overview?`<p class="lp-lead">${esc(p.overview.text)}</p>`:'<p class="lp-lead muted">README.md / CLAUDE.md に概要がありません</p>'}
+    <div class="lp-actions">
+      ${p.hasProjectDir?`<button class="btn save" onclick="updateProjectStatus('${esc(p.name)}','${esc(p.path)}')">状況を更新</button>`:''}
+      ${p.claudeMd?`<button class="btn cancel" onclick="openFile('${esc(p.claudeMd)}','CLAUDE.md',{deletable:false})">CLAUDE.md</button>`:''}
+      <button class="btn cancel" onclick="openCreate('memory','${esc(p.key)}')">＋メモリ</button>
+      <button class="btn cancel" style="margin-left:auto;color:#b3402a;border-color:#eccabf" onclick="deleteProject('${esc(p.key)}','${esc(p.name)}')">削除</button>
+    </div>
+  </div>`;
+
+  let roadmap = '';
+  if (rm) {
+    const gauge = pct!=null ? `<div class="lp-gauge">
+      <svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="${R}" class="g-bg"/><circle cx="60" cy="60" r="${R}" class="g-fg" style="stroke-dasharray:${C};stroke-dashoffset:${C*(1-pct/100)}"/></svg>
+      <div class="lp-gauge-c"><b>${pct}%</b><span>${rm.done}/${rm.total}</span></div>
+    </div>`:'';
+    const phases = rm.phases.length ? `<div class="lp-timeline">${rm.phases.map(x=>`<div class="lp-tl"><span class="lp-dot"></span><div class="lp-tln">${esc(x)}</div></div>`).join("")}</div>`:'';
+    const pend = rm.pending.length ? `<div class="lp-h" style="margin-top:14px">残タスク <span style="color:var(--faint);font-size:10px;font-weight:400;letter-spacing:0">タップして対応</span></div><div class="lp-checks">${rm.pending.map((x,i)=>`<div class="lp-chk" style="cursor:pointer" onclick="openTaskModal(${i},'task')"><span class="lp-box"></span><span>${esc(x)}</span></div>`).join("")}</div>`:'';
+    roadmap = `<div class="lp-card"><div class="lp-h">ロードマップ <span class="pj-src">${esc(rm.source)}</span></div>
+      <div class="lp-rm">${gauge}<div style="flex:1;min-width:0">${phases||'<span style="color:var(--faint);font-size:12px">フェーズ情報なし</span>'}</div></div>${pend}</div>`;
+  }
+
+  const issues = p.issues.length ? `<div class="lp-card"><div class="lp-h">課題・問題 <span style="color:var(--faint);font-size:10px;font-weight:400;letter-spacing:0">タップして対応</span></div>${p.issues.map((x,i)=>`<div class="lp-chk warn" style="cursor:pointer" onclick="openTaskModal(${i},'issue')"><span class="lp-box warn"></span><span>${esc(x)}</span></div>`).join("")}</div>`:'';
+
+  const mem = p.memories.length ? `<div class="lp-card"><div class="lp-h">メモリ <span class="pj-src">${p.memoryCount}件</span></div>${p.memories.map(m=>`<div class="frow" onclick="openFile('${esc(m.path)}','${esc(m.name)}',{deletable:true})"><div class="fn"><span class="t" style="color:var(--text)">${esc(m.description||m.name)}</span></div><span class="fa">開く</span></div>`).join("")}</div>`:'';
+
+  c.innerHTML = `<div class="lp">${hero}<div id="lp-recall"></div>${roadmap}${issues}${mem}<div id="lp-activity"><div class="lp-card"><div class="lp-h">活動の記録</div><div style="color:var(--faint);font-size:12px">読み込み中…</div></div></div></div>`;
+  loadActivity(p.key);
+}
+
+const dayLabel = iso => { const d=new Date(iso); const t=new Date(); const y=new Date(t-864e5);
+  const same=(a,b)=>a.toDateString()===b.toDateString();
+  if(same(d,t))return "今日"; if(same(d,y))return "昨日";
+  return `${d.getMonth()+1}/${d.getDate()}（${"日月火水木金土"[d.getDay()]}）`; };
+
+async function loadActivity(key){
+  let d; try{ d = await (await api(`/api/project-activity?key=${encodeURIComponent(key)}`)).json(); }catch{ return; }
+  const ss = (d&&d.sessions)||[];
+  // 前回のつづき（記憶の入口）
+  const recall = document.getElementById("lp-recall");
+  if(recall && ss[0] && ss[0].firstAsk){
+    const s=ss[0];
+    recall.innerHTML = `<div class="lp-card" style="background:linear-gradient(180deg,var(--accent-soft),var(--surface));border-color:var(--accent-line)">
+      <div class="lp-h">前回のつづき · ${dayLabel(s.start)}</div>
+      <div style="font-size:14px;line-height:1.7">「${esc(s.firstAsk)}」</div>
+      ${s.edits.length?`<div style="font-size:11.5px;color:var(--muted);margin-top:8px">編集: ${esc(s.edits.join(", "))}</div>`:''}
+      <button class="btn save" style="margin-top:12px" onclick="resumeFrom('${esc(key)}','${esc(s.id)}')">ここから再開</button>
+    </div>`;
+  }
+  // 活動タイムライン（日付ごと）
+  const el = document.getElementById("lp-activity"); if(!el) return;
+  if(!ss.length){ el.innerHTML = `<div class="lp-card"><div class="lp-h">活動の記録</div><div style="color:var(--faint);font-size:12px">記録がありません</div></div>`; return; }
+  const byDay={}; ss.forEach(s=>{ const k=s.start?new Date(s.start).toDateString():"-"; (byDay[k]=byDay[k]||[]).push(s); });
+  el.innerHTML = `<div class="lp-card"><div class="lp-h">活動の記録 <span class="pj-src">${ss.length}セッション</span></div>
+    ${Object.entries(byDay).map(([day,list])=>`
+      <div class="act-day">${list[0].start?dayLabel(list[0].start):"-"}</div>
+      ${list.map(s=>`<div class="act-row">
+        <div class="act-ask">${esc(s.firstAsk||"（やりとりの記録）")}</div>
+        ${s.edits.length?`<div class="act-meta">編集: ${esc(s.edits.join(", "))}</div>`:''}
+        <div class="act-meta">${s.turns} 往復</div>
+      </div>`).join("")}
+    `).join("")}</div>`;
+}
+function resumeFrom(key,id){
+  const p=(window._projData||[]).find(x=>x.key===key);
+  toggleWidget(true); setMode('apply');
+  const ta=document.getElementById("fw-prompt");
+  if(ta){ ta.value=`前回のセッションの続きから再開したいです。直近の作業内容を要約し、次に何をすべきか提案してください。`; ta.focus(); }
+}
+
+async function deleteProject(key,name){
+  if(!confirm(`「${name}」をClaudeManagerから削除します（記録はゴミ箱に退避・復元可）。よろしいですか？`)) return;
+  const j = await (await api(`/api/project?key=${encodeURIComponent(key)}`,{method:"DELETE"})).json();
+  if(j.ok){ cache.projects=null; go('projects'); } else alert("削除失敗: "+j.error);
+}
+
+/* ── 課題・タスク詳細モーダル ── */
+function openTaskModal(idx, type){
+  const text = type==='task' ? (window._lpTasks||[])[idx] : (window._lpIssues||[])[idx];
+  if(!text) return;
+  document.getElementById("task-d-title").textContent = type==='task' ? '残タスク' : '課題';
+  const ofb=document.getElementById("task-open-file");
+  ofb.style.display=""; ofb.textContent="いま相談"; ofb.setAttribute("onclick","sendTaskToAssistant()");
+  const sb=document.getElementById("task-send-btn"); sb.setAttribute("onclick","createRequest()"); sb.textContent="マネージャーに依頼";
+  document.getElementById("task-d-body").innerHTML = `
+    <div style="font-size:13.5px;line-height:1.7;padding-bottom:14px;border-bottom:1px solid var(--border);margin-bottom:14px">${esc(text)}</div>
+    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">補足 / 背景（任意）</div>
+    <textarea id="task-note" placeholder="背景・希望・締切など…（マネージャーが優先度づけに使います）" style="width:100%;min-height:80px;background:var(--bg);border:1px solid var(--border-strong);border-radius:9px;padding:10px 12px;font-size:14px;font-family:var(--sans);color:var(--text);outline:none;resize:vertical;box-sizing:border-box"></textarea>
+    <div style="font-size:11.5px;color:var(--faint);margin-top:8px;line-height:1.6">「依頼」すると<b>マネージャーの受信箱（依頼ボード）</b>に登録され、自動で優先度がつきます。すぐ相談したい時は下の「いま相談」を押してください。</div>`;
+  window._taskIdx=idx; window._taskType=type;
+  document.getElementById("taskModal").classList.add("on");
+  setTimeout(()=>document.getElementById("task-note")?.focus(),80);
+}
+function closeTaskModal(){ document.getElementById("taskModal").classList.remove("on"); }
+function sendTaskToAssistant(){
+  const note=(document.getElementById("task-note")?.value||"").trim();
+  const text = window._taskType==='task'?(window._lpTasks||[])[window._taskIdx]:(window._lpIssues||[])[window._taskIdx];
+  const label = window._taskType==='task'?'残タスク':'課題';
+  closeTaskModal(); toggleWidget(true); setMode('apply');
+  const ta=document.getElementById("fw-prompt");
+  if(ta){ ta.value=`${label}: 「${text}」${note?'\n\n背景: '+note:''}\n\nこの${label}に対応してください。`; ta.focus(); }
+}
+async function createRequest(){
+  const note=(document.getElementById("task-note")?.value||"").trim();
+  const text = window._taskType==='task'?(window._lpTasks||[])[window._taskIdx]:(window._lpIssues||[])[window._taskIdx];
+  const proj=window._lpProject||{name:"",key:""};
+  const sb=document.getElementById("task-send-btn"); sb.disabled=true;
+  try{
+    const j=await (await api("/api/requests",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({project:proj.name,projectKey:proj.key,title:text,detail:note})})).json();
+    if(j.ok){ cache.requests=null; closeTaskModal(); toast(`依頼を受け付けました（優先度: ${j.request.priority}）— 依頼ボードに追加`); }
+    else { alert("依頼に失敗: "+j.error); }
+  }catch(e){ alert("通信エラー: "+e.message); }
+  sb.disabled=false;
+}
+let _toastT=null;
+function toast(msg){
+  let el=document.getElementById("toast");
+  if(!el){ el=document.createElement("div"); el.id="toast"; document.body.appendChild(el); }
+  el.textContent=msg; el.className="on";
+  clearTimeout(_toastT); _toastT=setTimeout(()=>el.className="",2600);
+}
+
+/* ── MCP カタログ（アイコン＋できること） ── */
+const MCP_CAT = {
+  slack:{l:"Slack",s:"slack",d:"チームチャット",cap:["メッセージの送信・検索","チャンネル/スレッド要約","リマインド投稿"],use:"日々の連絡やお知らせをClaudeに任せる連携。リリース告知や日報の自動投稿、過去ログから「あの議論」を探して要約、特定チャンネルの未読をまとめる、といった使い方ができます。",ex:"#general に今日のリリース内容を要約して投稿して"},
+  linear:{l:"Linear",s:"linear",d:"課題・スプリント管理",cap:["課題の作成・更新","担当/状態の変更","スプリント状況の取得"],use:"開発タスクの起票・整理を会話で。バグを見つけたらその場で起票、優先度や担当を一括変更、今スプリントの残タスクと進捗を取得して状況把握、に向いています。",ex:"このバグをLinearに起票してP1で割り当てて"},
+  notion:{l:"Notion",s:"notion",d:"ドキュメント・DB",cap:["ページ作成・更新","データベース検索","議事録の追記"],use:"社内ドキュメントの読み書き。議事録の追記、仕様書の下書き作成、データベース（タスク表・顧客表など）の検索や更新を会話で行えます。",ex:"今週の決定事項をNotionの議事録ページに追記して"},
+  figma:{l:"Figma",s:"figma",d:"デザイン参照",cap:["ファイル/フレーム取得","コメント参照","コンポーネント情報"],use:"デザインを実装に橋渡し。指定フレームの寸法・色・テキストを読み取ってコード化、レビューコメントの確認、コンポーネント構成の把握に使えます。",ex:"このFigmaのデザイン仕様を読み取って実装して"},
+  canva:{l:"Canva",s:"canva",d:"デザイン作成",cap:["デザイン生成","テンプレ適用","書き出し"],use:"告知バナーやSNS画像をテンプレから素早く作成・書き出し。デザイン知識がなくても指示だけで成果物を得たい時に。",ex:"この告知用のバナーをCanvaで作って"},
+  klaviyo:{l:"Klaviyo",s:"",d:"メール/SMSマーケ",cap:["キャンペーン情報取得","セグメント参照","指標の確認"],use:"メール/SMS施策の効果確認とセグメント把握。開封率・クリック率の取得、配信対象セグメントの確認に。",ex:"先週のメール開封率をKlaviyoから取得して"},
+  supermetrics:{l:"Supermetrics",s:"",d:"マーケ指標集約",cap:["各広告媒体の指標取得","レポート集約"],use:"複数広告媒体（Google/Meta等）の数字を一箇所に集約。横断レポートやKPIの取りまとめに。",ex:"今月の広告費とCPAをまとめて"},
+  ahrefs:{l:"Ahrefs",s:"",d:"SEO分析",cap:["被リンク調査","キーワード難易度","流入分析"],use:"SEOの調査全般。被リンク状況、狙うキーワードの難易度、オーガニック流入の分析に。",ex:"このドメインの被リンク状況を調べて"},
+  amplitude:{l:"Amplitude",s:"",d:"プロダクト分析",cap:["イベント分析","ファネル/リテンション","ユーザー行動"],use:"プロダクト内のユーザー行動分析。登録ファネルの離脱、機能の利用率、リテンションの推移を会話で確認。",ex:"先週のサインアップファネルを分析して"},
+  "amplitude-eu":{l:"Amplitude EU",s:"",d:"プロダクト分析(EU)",cap:["イベント分析","ファネル/リテンション"],use:"AmplitudeのEUデータ拠点版。EUリージョンの行動分析に。",ex:"EUリージョンのリテンションを見て"},
+  atlassian:{l:"Atlassian",s:"",d:"Jira / Confluence",cap:["Jira課題操作","Confluenceページ","スプリント管理"],use:"Jira/Confluence運用。課題の起票・更新、Confluenceドキュメントの作成・参照、スプリント管理に。",ex:"このタスクをJiraに起票して"},
+  datadog:{l:"Datadog",s:"datadog",d:"監視・ログ",cap:["メトリクス取得","ログ検索","アラート確認"],use:"運用監視。エラーログの調査、メトリクスの確認、発生中アラートのトリアージに。障害対応の初動調査が速くなります。",ex:"直近のエラーログをDatadogで調べて"},
+  apollo:{l:"Apollo",s:"",d:"営業リード",cap:["連絡先検索","企業情報","リスト作成"],use:"営業のリード探索。条件に合う企業・担当者を検索し、アプローチ用リストを作成。",ex:"この業界のリードをApolloで探して"},
+  close:{l:"Close",s:"",d:"営業CRM",cap:["商談/リード操作","活動記録","パイプライン参照"],use:"営業CRM操作。商談の更新、活動ログの記録、パイプライン状況の確認に。",ex:"この商談をCloseで次フェーズに進めて"},
+  outreach:{l:"Outreach",s:"",d:"営業アウトリーチ",cap:["シーケンス管理","メール送信","エンゲージ追跡"],use:"アウトバウンド営業の自動化。リードをシーケンスに追加、送信状況やエンゲージの追跡に。",ex:"このリードをOutreachのシーケンスに追加して"},
+  fireflies:{l:"Fireflies",s:"",d:"会議の文字起こし",cap:["文字起こし取得","要約","アクション抽出"],use:"会議の記録活用。文字起こしの取得、要点の要約、ToDo（アクションアイテム）の抽出に。",ex:"さっきの会議の要点とToDoをまとめて"},
+  github:{l:"GitHub",s:"github",d:"リポジトリ操作",cap:["Issue/PR操作","コード検索","リリース確認"],use:"リポジトリ運用。Issue/PRの作成・確認、コード横断検索、リリース状況の把握に。開発フローを会話で回せます。",ex:"このバグのIssueをGitHubに立てて"},
+  similarweb:{l:"Similarweb",s:"",d:"トラフィック分析",cap:["流入分析","競合比較","チャネル内訳"],use:"市場・競合のトラフィック調査。競合サイトの流入元、チャネル内訳、自社との比較に。",ex:"競合サイトの流入元を調べて"},
+};
+function mcpInfo(key){ const id=key.split(":").pop(); return {id, ...(MCP_CAT[id]||{l:id,s:"",d:"",cap:[],ex:""})}; }
+function mcpIcon(info){
+  const letter = esc((info.l||"?")[0]);
+  if(!info.s) return `<span class="mcp-fb">${letter}</span>`;
+  return `<img src="https://cdn.simpleicons.org/${info.s}" width="24" height="24" loading="lazy" style="object-fit:contain" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'mcp-fb',textContent:'${letter}'}))"/>`;
+}
+function openMcp(key, connected){
+  const info = mcpInfo(key);
+  const status = connected
+    ? `<span style="color:var(--ok);font-weight:700">接続済み</span> — そのまま使えます`
+    : `<span style="color:var(--accent);font-weight:700">未認証</span> — 設定すると使えます`;
+  document.getElementById("mcp-d-body").innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
+      <span style="transform:scale(1.4)">${mcpIcon(info)}</span>
+      <div><div style="font-size:17px;font-weight:700">${esc(info.l)}</div><div style="font-size:12px;color:var(--muted)">${esc(info.d)} · ${status}</div></div>
+    </div>
+    <div class="pj-h" style="margin-top:14px">どんな時に使う</div>
+    <p style="font-size:13px;line-height:1.75;color:var(--text);margin:0">${esc(info.use||info.d||"")}</p>
+    <div class="pj-h" style="margin-top:14px">できること</div>
+    <ul class="pj-list">${(info.cap||[]).map(x=>`<li>${esc(x)}</li>`).join("")||"<li>—</li>"}</ul>
+    ${info.ex?`<div class="pj-h" style="margin-top:14px">指示の例</div><div style="background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:10px 13px;font-size:13px;line-height:1.6">「${esc(info.ex)}」</div>`:""}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">
+      <button class="btn save" onclick="setupMcp('${esc(key)}',${connected})">アシスタントで設定する</button>
+      ${info.ex?`<button class="btn cancel" onclick="useMcpExample('${esc(info.ex).replace(/'/g,"&#39;")}')">例で試す</button>`:""}
+    </div>
+    <p style="font-size:11px;color:var(--faint);margin:10px 0 0;line-height:1.6">${connected?'すでに接続済みなので、右下のマネージャーやClaudeに普通に指示すれば使えます。':'「アシスタントで設定する」を押すと、設定・認証の手順をマネージャーが案内し、可能な範囲で実行します（OAuthログインなどはお手元での操作が必要な場合があります）。'}</p>`;
+  document.getElementById("mcpModal").classList.add("on");
+}
+function closeMcp(){ document.getElementById("mcpModal").classList.remove("on"); }
+function useMcpExample(ex){ closeMcp(); toggleWidget(true); setMode('apply'); const ta=document.getElementById("fw-prompt"); if(ta){ ta.value=ex; ta.focus(); } }
+function setupMcp(key, connected){
+  const info = mcpInfo(key);
+  const prompt = connected
+    ? `${info.l} のMCP連携は接続済みです。${info.l} を実際に使う具体的な手順と、すぐ試せる指示例をいくつか教えてください。`
+    : `${info.l} のMCP連携を使えるように設定したいです。`+
+      `現在の接続状況を確認し、設定・認証の手順（claude mcp コマンドや各サービスのログイン）を順を追って案内してください。`+
+      `自動でできる部分（claude mcp add 等）は実行し、私の操作が必要な部分は明示してください。`;
+  closeMcp(); toggleWidget(true); setMode('apply');
+  const ta=document.getElementById("fw-prompt"); if(ta){ ta.value=prompt; ta.focus(); }
+}
+
+function drawRoutines() {
+  const c = document.getElementById("content");
+  const d = cache.routines||{agents:[],lastFired:null};
+  const ag = d.agents||[];
+  const running = ag.filter(a=>a.status&&a.status!=="idle");
+  window._agentData = ag;
+  c.innerHTML = `
+    <div class="panel">
+      <h3>スケジュールルーチン</h3>
+      <div style="font-size:13px;color:var(--muted)">最終実行: ${d.lastFired?`${ago(d.lastFired)}（${new Date(d.lastFired).toLocaleString()}）`:'記録なし'}</div>
+      <p style="font-size:11.5px;color:var(--faint);margin:8px 0 0;line-height:1.7">/schedule のルーチン本体はクラウド管理のためローカルで一覧取得できません。バックグラウンド・エージェントは下で確認できます。</p>
+    </div>
+    ${ag.length?`
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;padding:14px 2px 8px">
+        バックグラウンド・エージェント（${ag.length}）${running.length?` · <span style="color:var(--ok)">稼働中 ${running.length}</span>`:''}
+      </div>
+      <div class="card-grid">
+        ${ag.map((a,i)=>`
+          <div class="scard" onclick="openAgent(${i})">
+            <div class="scard-h">
+              <div style="display:flex;align-items:center;gap:8px;min-width:0">
+                <span style="width:8px;height:8px;flex-shrink:0;border-radius:50%;background:${a.status&&a.status!=='idle'?'var(--ok)':'var(--faint)'};${a.status&&a.status!=='idle'?'box-shadow:0 0 5px var(--ok)':''}"></span>
+                <span class="scard-nm">${esc(baseName(a.cwd)||a.sessionId.slice(0,8))}</span>
+              </div>
+              <span style="font-size:11px;color:var(--faint);white-space:nowrap;flex-shrink:0">${a.startedAt?ago(a.startedAt):''}</span>
+            </div>
+            <div style="font-size:12px;color:var(--muted);margin-top:6px">${esc(a.status==='idle'?'アイドル':a.status||'稼働中')}</div>
+            ${a.cwd?`<div style="font-size:11px;color:var(--faint);margin-top:4px;font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.cwd)}</div>`:''}
+          </div>
+        `).join("")}
+      </div>`
+    :`<div class="panel"><div style="color:var(--faint);font-size:13px">稼働中のバックグラウンド・エージェントはありません</div></div>`}`;
+}
+async function openAgent(i){
+  const a=(window._agentData||[])[i]; if(!a) return;
+  await go('sessions');
+  const idx=(cache.sessions||[]).findIndex(s=>s.id===a.sessionId);
+  if(idx>=0) openSession(idx);
+}
+
+/* ── ホーム（LP風・保持アーティファクトの紹介） ── */
+function drawHome(){
+  const c=document.getElementById("content");
+  const skills=cache.skills||[], agents=cache.agents||[], projects=cache.projects||[], sessions=cache.sessions||[];
+  const mcp=cache.mcp||{connected:[],needsAuth:[]};
+  const mcpN=(mcp.connected||[]).length+(mcp.needsAuth||[]).length, mcpOk=(mcp.connected||[]).length;
+  const reqOpen=(cache.requests||[]).filter(r=>r.status!=='done').length;
+  const activeN=sessions.filter(s=>s.active).length;
+  const topSkill=[...skills].sort((a,b)=>(b.usageCount||0)-(a.usageCount||0))[0];
+  const topAgent=[...agents].sort((a,b)=>(b.usageCount||0)-(a.usageCount||0))[0];
+  const topProj=[...projects].sort((a,b)=>(b.sessionCount||0)-(a.sessionCount||0))[0];
+  const art=(iconName,num,unit,nm,ds,hl,onclick)=>`
+    <div class="home-art" onclick="${onclick}">
+      <div class="ic">${ic(iconName,20)}</div>
+      <div class="num">${num}<span>${unit}</span></div>
+      <div class="nm">${nm}</div>
+      <div class="ds">${ds}</div>
+      ${hl?`<div class="hl">${hl}</div>`:''}
+    </div>`;
+  c.innerHTML=`<div class="home">
+    <div class="home-hero">
+      <div class="home-eyebrow">Claude Code をひと目で</div>
+      <h1 class="home-title">あなたの Claude を、<br>まるごと見渡す。</h1>
+      <p class="home-lead">ClaudeManager は <code>~/.claude</code> を読み取り、スキル・サブエージェント・プロジェクト・セッション・連携を1画面に集約します。右下の<b>マネージャー</b>に相談すれば、課題の整理から作成・実行までここで完結します。</p>
+      <div class="home-cta">
+        <button class="btn save" onclick="toggleWidget(true)">マネージャーに相談する</button>
+        <button class="btn cancel" onclick="go('stats')">ダッシュボードを見る</button>
+      </div>
+    </div>
+
+    <div class="home-sec">はじめに知っておくこと</div>
+    <div class="home-notes">
+      <div class="home-note">
+        <span class="ni">${ic('check',17)}</span>
+        <div><b>Claude Code の導入が前提です</b><p>このアプリは <code>~/.claude</code> を読み書きします。先に Claude Code（<code>claude</code> コマンド）をインストールし、ログイン済みにしておいてください。未導入だと一覧は空になります。</p></div>
+      </div>
+      <div class="home-note">
+        <span class="ni">${ic('zap',17)}</span>
+        <div><b>マネージャーはあなたの利用枠で動きます</b><p>右下のマネージャーに送信すると、あなたの Claude のレート（利用枠）を消費します。閲覧・一覧・件数の表示は枠を使いません。送信した時だけ消費します。</p></div>
+      </div>
+      <div class="home-note">
+        <span class="ni">${ic('compass',17)}</span>
+        <div><b>モデルは選べます（Haiku / Sonnet で十分）</b><p>マネージャーの送信欄でモデルを切り替えできます。普段の相談・依頼対応は <b>Haiku</b>、込み入った実装は <b>Sonnet</b> で十分です。Opus は枠の消費が大きいので必要な時だけに。</p></div>
+      </div>
+      <div class="home-note">
+        <span class="ni" style="background:#e9edf6;color:var(--info)">${ic('bulb',17)}</span>
+        <div><b>Claudeが使えない時は Grok / AGY に切り替え可能</b><p>レートリミット等でClaudeが使えない場合、マネージャーのエンジン切り替え（🤖→🛠/🚀）で <b>GrokBuildCLI</b> や <b>AGY</b> に直接指示できます。エラー時は「Grokで再試行」ボタンも表示されます。</p></div>
+      </div>
+    </div>
+
+    <div class="home-sec">保持しているアーティファクト</div>
+    <div class="home-grid">
+      ${art('zap',skills.length,'個','スキル','よく使う手順を一発で呼べる“型”。',topSkill&&topSkill.usageCount?`最多: ${esc(skillInfo(topSkill).ja)}（${topSkill.usageCount}回）`:'タップで一覧へ',"go('skills')")}
+      ${art('hex',agents.length,'体','サブエージェント','調査や設計を切り出す“別働隊”。',topAgent&&topAgent.usageCount?`最多: ${esc(agentInfo(topAgent).ja)}（${topAgent.usageCount}回）`:'タップで一覧へ',"go('agents')")}
+      ${art('folder',projects.length,'件','プロジェクト','概要・ロードマップ・課題を一望。',topProj?`よく使う: ${esc(topProj.name)}`:'タップで一覧へ',"go('projects')")}
+      ${art('msg',sessions.length,'件','セッション','作業の決定ログと再開。',activeN?`進行中 ${activeN}件`:'タップで一覧へ',"go('sessions')")}
+      ${art('link',mcpN,'件','MCP連携','外部サービスとの接続。',mcpN?`接続済み ${mcpOk}`:'未設定',"go('stats')")}
+      ${art('inbox',reqOpen,'件','依頼ボード','マネージャーへの課題依頼キュー。',reqOpen?'対応待ちあり':'依頼なし',"go('stats')")}
+    </div>
+
+    <div class="home-sec">はじめかた</div>
+    <div class="home-grid">
+      ${art('compass','1','','課題を見つける','プロジェクトの課題やロードマップ残を確認。','プロジェクトへ →',"go('projects')")}
+      ${art('inbox','2','','マネージャーに依頼','課題を依頼ボードに登録、優先度が自動でつく。','ダッシュボードへ →',"go('stats')")}
+      ${art('check','3','','まとめて着手','受信箱からマネージャーに渡して対応。','相談する →',"toggleWidget(true)")}
+    </div>
+  </div>`;
+}
+
+/* ── 依頼ボード（マネージャーの受信箱） ── */
+const PRIO_CLASS={"高":"h","中":"m","低":"l"};
+function renderReqBoard(){
+  const reqs=(cache.requests||[]).filter(r=>r.status!=="done");
+  const done=(cache.requests||[]).filter(r=>r.status==="done").length;
+  return `<div class="panel" style="border-color:var(--accent-line);background:linear-gradient(180deg,var(--accent-soft),var(--surface))">
+    <h3 style="display:flex;align-items:center;gap:8px;justify-content:space-between">
+      <span style="display:flex;align-items:center;gap:8px"><span style="color:var(--accent);display:flex">${ic('inbox',17)}</span>マネージャーの受信箱（依頼ボード）</span>
+      <span style="font-size:11px;font-weight:500;color:var(--muted)">${reqs.length}件対応待ち${done?` · 完了${done}`:''}</span>
+    </h3>
+    ${reqs.length?reqs.map(r=>`
+      <div class="req-row ${r.status==='done'?'done':''}">
+        <span class="prio ${PRIO_CLASS[r.priority]||'m'}">${esc(r.priority)}</span>
+        <div style="flex:1;min-width:0">
+          <div class="req-t">${esc(r.title)}</div>
+          <div class="req-meta">${esc(r.project)}${r.autoPriority?' · 自動優先度':''}${r.status==='doing'?' · 対応中':''}</div>
+        </div>
+        <div style="display:flex;gap:4px;flex-shrink:0">
+          <button class="modebtn" onclick="reqConsult('${r.id}')" title="マネージャーに相談">相談</button>
+          <button class="modebtn" onclick="reqCyclePrio('${r.id}')" title="優先度変更">⇅</button>
+          <button class="modebtn" onclick="reqDone('${r.id}')" title="完了">✓</button>
+          <button class="modebtn" onclick="reqDelete('${r.id}')" title="削除" style="color:#b3402a">✕</button>
+        </div>
+      </div>`).join("")
+    :'<div style="color:var(--muted);font-size:13px">依頼はありません。プロジェクトの課題から「マネージャーに依頼」すると、ここに優先度つきで並びます。</div>'}
+    ${reqs.length?`<button class="btn save" style="margin-top:12px" onclick="reqTriageAll()">受信箱をマネージャーに渡して着手</button>`:''}
+  </div>`;
+}
+function reqOf(id){ return (cache.requests||[]).find(r=>r.id===id); }
+async function reqPatch(id,patch){ await api("/api/requests",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,...patch})}); cache.requests=null; go('stats'); }
+function reqDone(id){ reqPatch(id,{status:"done"}); }
+function reqCyclePrio(id){ const r=reqOf(id); const nx={"高":"中","中":"低","低":"高"}; reqPatch(id,{priority:nx[r.priority]||"中"}); }
+async function reqDelete(id){ if(!confirm("この依頼を削除しますか？"))return; await api(`/api/requests?id=${id}`,{method:"DELETE"}); cache.requests=null; go('stats'); }
+function reqConsult(id){ const r=reqOf(id); if(!r)return; toggleWidget(true); setMode('apply');
+  const ta=document.getElementById("fw-prompt"); if(ta){ ta.value=`【依頼】${r.project} / 優先度${r.priority}\n課題: ${r.title}${r.detail?'\n背景: '+r.detail:''}\n\nこの課題に対応してください。`; ta.focus(); } }
+function reqTriageAll(){
+  const reqs=(cache.requests||[]).filter(r=>r.status!=="done");
+  toggleWidget(true); setMode('propose');
+  const list=reqs.map(r=>`・[${r.priority}] ${r.project}: ${r.title}`).join("\n");
+  const ta=document.getElementById("fw-prompt");
+  if(ta){ ta.value=`受信箱に溜まっている依頼です。優先度を見直し、どれから着手すべきか順番と理由を整理して、最初の1件の進め方を提案してください。\n\n${list}`; ta.focus(); }
+}
+
+function drawDashboard() {
+  const c = document.getElementById("content");
+  const d = cache.stats, sessions = cache.sessions||[], projects = cache.projects||[], mcp = cache.mcp||{connected:[],needsAuth:[]};
+  const max = Math.max(1, ...d.recent.map(x=>x.messageCount||0));
+  const recentSessions = sessions.slice(0,5);
+  const topProjects = projects.filter(p=>p.overview||p.roadmap).slice(0,3);
+  const skillsN = (cache.skills||[]).length, agentsN = (cache.agents||[]).length;
+  const active = sessions.filter(s=>s.active);
+
+  // やること（アクション項目）を集約
+  const todos = [];
+  projects.forEach(p=>{
+    (p.issues||[]).slice(0,2).forEach((t,issueIdx)=>
+      todos.push({t:`${p.name}: ${t}`, tag:"課題",
+        act:()=>{ go('projects').then(()=>{ drawProjectDetail(p); setTimeout(()=>openTaskModal(issueIdx,'issue'),120); }); }}));
+    if(p.roadmap && p.roadmap.pending && p.roadmap.pending.length)
+      todos.push({t:`${p.name}: ロードマップ残 ${p.roadmap.total-p.roadmap.done}件（次: ${p.roadmap.pending[0]}）`, tag:"ロードマップ",
+        act:()=>{ go('projects').then(()=>{ drawProjectDetail(p); setTimeout(()=>openTaskModal(0,'task'),120); }); }});
+  });
+  if(mcp.needsAuth && mcp.needsAuth.length)
+    todos.push({t:`未認証の連携 ${mcp.needsAuth.length}件 — 設定すると使えます`, act:()=>go('stats'), tag:"連携"});
+  window._todoActs = todos.map(x=>x.act);
+
+  c.innerHTML = renderReqBoard() + `
+    <div class="panel" style="border-color:var(--accent-line)">
+      <h3 style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:var(--accent)"></span>プロジェクトの課題（依頼候補）</h3>
+      ${todos.length?todos.slice(0,8).map((x,i)=>`<div class="frow" onclick="(window._todoActs[${i}])()">
+        <div class="fn"><span class="ix" style="background:var(--accent-soft);color:var(--accent);padding:1px 6px;border-radius:4px;flex-shrink:0">${esc(x.tag)}</span><span class="t">${esc(x.t)}</span></div>
+        <span class="fa">依頼 →</span></div>`).join("")
+      :'<div style="color:var(--muted);font-size:13px">未対応の課題はありません。右下のマネージャーから新しい作業を始められます。</div>'}
+    </div>`+`
+    <div class="panel" style="border-color:${active.length?'var(--accent-line)':'var(--border)'};background:${active.length?'linear-gradient(180deg,var(--accent-soft),var(--surface))':'var(--surface)'}">
+      <h3 style="display:flex;align-items:center;gap:8px">${active.length?'<span style="width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 7px var(--ok)"></span>':''}現在の作業</h3>
+      ${active.length?active.map(s=>`<div class="frow" onclick="go('sessions')">
+        <div class="fn" style="flex-direction:column;align-items:flex-start;gap:2px;min-width:0">
+          <span class="t" style="font-weight:600;color:var(--text)">${esc(baseName(s.cwd)||s.id.slice(0,8))} <span style="color:var(--ok);font-size:11px">● 進行中</span></span>
+          <span style="font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">${esc((s.last&&s.last.text)||(s.last&&s.last.tools&&s.last.tools.join(", "))||"作業中")}</span>
+        </div><span class="fa">${ago(s.lastAt)}</span></div>`).join("")
+      :'<div style="color:var(--muted);font-size:13px">進行中のセッションはありません。右下のマネージャーから作業を始められます。</div>'}
+    </div>
+    <div class="two">
+      <div class="panel"><h3>最近のセッション <span class="pj-src" style="cursor:pointer" onclick="go('sessions')">すべて見る →</span></h3>
+        ${recentSessions.length?recentSessions.map(s=>`<div class="frow" onclick="go('sessions')">
+          <div class="fn"><span style="width:7px;height:7px;border-radius:50%;background:${s.active?'var(--ok)':'var(--faint)'};flex-shrink:0"></span><span class="t">${esc(baseName(s.cwd)||s.id.slice(0,8))}</span></div>
+          <span class="fa">${s.active?'進行中':ago(s.lastAt)}</span></div>`).join(""):'<div style="color:var(--faint);font-size:13px">なし</div>'}
+      </div>
+      <div class="panel"><h3>プロジェクト概要 <span class="pj-src" style="cursor:pointer" onclick="go('projects')">すべて見る →</span></h3>
+        ${topProjects.length?topProjects.map(p=>{const rm=p.roadmap,pct=rm&&rm.total?Math.round(rm.done/rm.total*100):null;return `<div class="frow" style="flex-direction:column;align-items:stretch;gap:4px" onclick="go('projects')">
+          <div class="fn" style="justify-content:space-between"><span class="t" style="font-weight:600;color:var(--text)">${esc(p.name)}</span>${pct!=null?`<span class="fa">${pct}%</span>`:''}</div>
+          <div style="font-size:11.5px;color:var(--muted);line-height:1.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc((p.overview&&p.overview.text)||(rm?'ロードマップあり':''))}</div></div>`;}).join(""):'<div style="color:var(--faint);font-size:13px">概要のあるプロジェクトなし</div>'}
+      </div>
+    </div>
+    <div class="tiles">
+      <div class="tile" style="cursor:pointer" onclick="go('sessions')"><div class="n">${sessions.length}</div><div class="l">記録セッション →</div></div>
+      <div class="tile" style="cursor:pointer" onclick="go('skills')"><div class="n">${skillsN}</div><div class="l">スキル →</div></div>
+      <div class="tile" style="cursor:pointer" onclick="go('agents')"><div class="n">${agentsN}</div><div class="l">サブエージェント →</div></div>
+      <div class="tile" style="cursor:pointer" onclick="go('projects')"><div class="n">${(projects||[]).length}</div><div class="l">プロジェクト →</div></div>
+    </div>
+    <div class="panel"><h3>設定</h3>
+      <div class="kv">
+        <div class="r"><span class="k">モデル</span><span class="v">${esc(d.settings.model)}</span></div>
+        <div class="r"><span class="k">権限(permissions)</span><span class="v">${d.settings.permissions.length} 種</span></div>
+        <div class="r"><span class="k">フック(hooks)</span><span class="v">${d.settings.hooks.length?esc(d.settings.hooks.join(", ")):"なし"}</span></div>
+        <div class="r"><span class="k">累計（${d.lastComputedDate||"-"}時点）</span><span class="v">${d.totals.messages.toLocaleString()}msg / ${d.totals.toolCalls.toLocaleString()}tool</span></div>
+      </div>
+    </div>
+    <div class="panel" style="border-color:${(d.rateLimitEvents && d.rateLimitEvents.length) ? '#b3402a' : 'var(--border)'}">
+      <h3 style="display:flex;align-items:center;gap:8px">
+        <span style="width:8px;height:8px;border-radius:50%;background:${(d.rateLimitEvents && d.rateLimitEvents.length) ? '#b3402a' : 'var(--ok)'}"></span>
+        Claude 利用統計と制限状況
+      </h3>
+      
+      ${(d.rateLimitEvents && d.rateLimitEvents.length) ? `
+        <div style="background:rgba(179,64,42,0.1);border:1px solid rgba(179,64,42,0.4);color:#d9534f;padding:12px;border-radius:8px;margin-bottom:16px;font-size:13px;line-height:1.6">
+          <strong style="color:#b3402a">⚠️ 最近レート制限エラーが検出されました</strong>
+          <p style="margin:4px 0 8px">Claude CLIでレートリミットまたは接続エラーが発生した可能性があります。制限時は他のエンジン（Grok/AGY）での代替実行が可能です。</p>
+          <div style="font-size:12px;opacity:0.9;max-height:120px;overflow-y:auto;background:var(--bg);padding:8px;border-radius:6px;border:1px solid var(--border)">
+            ${d.rateLimitEvents.map(e => `
+              <div style="border-bottom:1px solid var(--border);padding:6px 0;color:var(--text);text-align:left">
+                <span style="color:var(--muted)">[${ago(e.timestamp)}]</span> プロジェクト: <strong>${esc(e.project)}</strong> <br/>
+                <code style="color:#b3402a">${esc(e.preview)}</code>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      ` : `
+        <div style="color:var(--ok);font-size:13.5px;margin-bottom:16px;display:flex;align-items:center;gap:6px;font-weight:600">
+          <span>✔</span> レート制限エラーは検出されていません。正常に動作しています。
+        </div>
+      `}
+      
+      ${(() => {
+        if (!d.dailyModelTokens || !d.dailyModelTokens.length) return '<div style="font-size:12.5px;color:var(--muted);margin-bottom:16px">トークン使用履歴はありません。</div>';
+        const sorted = [...d.dailyModelTokens].sort((a,b) => b.date.localeCompare(a.date));
+        const latest = sorted[0];
+        const models = Object.entries(latest.tokensByModel || {});
+        const totalTokens = models.reduce((acc, [_, val]) => acc + val, 0);
+        const limitEstimate = 1000000;
+        const pct = Math.min(100, Math.round((totalTokens / limitEstimate) * 100));
+        
+        return `
+          <div style="margin-bottom:16px">
+            <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:6px">
+              <span>直近のトークン消費日: <strong>${latest.date}</strong></span>
+              <span>合計: <strong>${totalTokens.toLocaleString()}</strong> tokens</span>
+            </div>
+            <div style="width:100%;height:8px;background:var(--surface-2);border-radius:4px;overflow:hidden;margin-bottom:8px">
+              <div style="width:${pct}%;height:100%;background:${pct > 80 ? '#b3402a' : pct > 50 ? 'var(--accent)' : 'var(--ok)'};border-radius:4px"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(180px, 1fr));gap:8px;font-size:11.5px">
+              ${models.map(([name, val]) => `
+                <div style="background:var(--surface-2);padding:6px 10px;border-radius:6px;display:flex;justify-content:space-between;border:1px solid var(--border)">
+                  <span style="color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px;text-align:left" title="${esc(name)}">${esc(name.replace('claude-', ''))}</span>
+                  <span style="font-weight:600;color:var(--text)">${val.toLocaleString()}</span>
+                </div>
+              `).join("")}
+            </div>
+          </div>
+        `;
+      })()}
+      
+      ${(() => {
+        if (!d.modelUsage || !Object.keys(d.modelUsage).length) return '';
+        const usages = Object.entries(d.modelUsage);
+        return `
+          <div style="border-top:1px solid var(--border);padding-top:12px">
+            <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px">モデル別の累計消費（${d.lastComputedDate || "キャッシュ"}時点）</div>
+            <div style="display:flex;flex-direction:column;gap:6px;font-size:11.5px">
+              ${usages.map(([name, usage]) => {
+                const inT = usage.inputTokens || 0;
+                const outT = usage.outputTokens || 0;
+                const cacheR = usage.cacheReadInputTokens || 0;
+                const cacheC = usage.cacheCreationInputTokens || 0;
+                const total = inT + outT + cacheR + cacheC;
+                return `
+                  <div style="display:flex;justify-content:space-between;align-items:center;background:var(--surface-2);padding:8px 12px;border-radius:6px;border:1px solid var(--border)">
+                    <span style="font-weight:600;color:var(--text);font-size:11.5px;text-align:left">${esc(name)}</span>
+                    <span style="color:var(--muted);font-size:11px">
+                      合計: <strong style="color:var(--text)">${(total/1000000).toFixed(2)}M</strong> t 
+                      (入: ${(inT/1000000).toFixed(2)}M / 出: ${(outT/1000000).toFixed(2)}M / キャッシュ読: ${(cacheR/1000000).toFixed(2)}M)
+                    </span>
+                  </div>
+                `;
+              }).join("")}
+            </div>
+          </div>
+        `;
+      })()}
+    </div>
+    <div class="panel">
+      <h3>MCP 連携（外部ツール接続）</h3>
+      <p style="font-size:12px;color:var(--muted);margin:0 0 12px;line-height:1.7">MCPは Claude が外部サービス（Slack・Notion・GitHub等）を操作するための接続です。各アイコンをクリックすると「できること・使い方」が見られます。<b>接続済み</b>はすぐ使え、<b>未認証</b>はログインすると使えます。</p>
+      ${mcp.connected&&mcp.connected.length?`<div class="pj-h" style="margin-bottom:8px">接続済み（${mcp.connected.length}）</div>
+        <div class="mcp-grid">${mcp.connected.map(m=>{const info=mcpInfo(m.name);return `<div class="mcp-item" onclick="openMcp('${esc(m.name)}',true)"><span class="mcp-ic">${mcpIcon(info)}</span><div class="mcp-tx"><div class="mcp-nm">${esc(info.l!==info.id?info.l:m.name)}</div><div class="mcp-st" style="color:${m.ok?'var(--ok)':'#b3402a'}">${m.ok?'接続中':'要確認'}</div></div></div>`;}).join("")}</div>`:""}
+      ${mcp.needsAuth&&mcp.needsAuth.length?`<div class="pj-h" style="margin:14px 0 8px">未認証の連携（${mcp.needsAuth.length}）— ログインで利用可能</div>
+        <div class="mcp-grid">${mcp.needsAuth.map(k=>{const info=mcpInfo(k);return `<div class="mcp-item" onclick="openMcp('${esc(k)}',false)"><span class="mcp-ic">${mcpIcon(info)}</span><div class="mcp-tx"><div class="mcp-nm">${esc(info.l)}</div><div class="mcp-st">${esc(info.d)}</div></div></div>`;}).join("")}</div>`:""}
+      <div class="pj-h" style="margin:16px 0 8px">MCPを追加</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input id="mcp-name" placeholder="名前 (例: sentry)" style="flex:0 1 140px;background:var(--bg);border:1px solid var(--border-strong);border-radius:8px;padding:8px 11px;font-size:13px;color:var(--text)"/>
+        <input id="mcp-url" placeholder="URL (https://mcp.example.com/mcp)" style="flex:1;min-width:180px;background:var(--bg);border:1px solid var(--border-strong);border-radius:8px;padding:8px 11px;font-size:13px;color:var(--text)"/>
+        <button class="btn save" id="mcp-add" onclick="addMcp()">追加</button>
+      </div>
+      <div id="mcp-out" style="margin-top:8px"></div>
+    </div>`;
+}
+async function addMcp(){
+  const name=document.getElementById("mcp-name").value.trim(), url=document.getElementById("mcp-url").value.trim();
+  if(!name||!url) return;
+  const out=document.getElementById("mcp-out"), btn=document.getElementById("mcp-add");
+  btn.disabled=true; out.innerHTML='<span style="color:var(--muted);font-size:13px">追加中…</span>';
+  try{
+    const j=await (await api("/api/mcp/add",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,url})})).json();
+    if(j.ok){ out.innerHTML='<span style="color:var(--ok);font-size:13px">追加しました</span>'; logActivity(`MCP追加: ${name}`); cache.mcp=null; setTimeout(()=>go('stats'),700); }
+    else out.innerHTML=`<span style="color:#b3402a;font-size:13px">${esc(j.error)}</span>`;
+  }catch(e){ out.innerHTML=`<span style="color:#b3402a;font-size:13px">${esc(e.message)}</span>`; }
+  btn.disabled=false;
+}
+
+/* ── Editor ── */
+function setPreview(on){
+  // on=プレビュー（rendered）/ off=生MD編集
+  document.getElementById("m-text").style.display = on ? "none" : "block";
+  document.getElementById("m-render").style.display = on ? "block" : "none";
+  document.getElementById("m-preview").textContent = on ? "編集（MD）" : "プレビュー";
+  if (on) document.getElementById("m-render").innerHTML = mdToHtml(document.getElementById("m-text").value);
+}
+function togglePreview(){ setPreview(document.getElementById("m-render").style.display==="none"); }
+
+async function openFile(p, title, opts={}) {
+  curPath = p;
+  document.getElementById("m-title").textContent = title;
+  document.getElementById("m-path").textContent = p;
+  const isMd = /\.md$/.test(p);
+  const ta = document.getElementById("m-text");
+  ta.value = "読み込み中…";
+  setPreview(false);
+  document.getElementById("modal").classList.add("on");
+  const j = await (await api(`/api/file?path=${encodeURIComponent(p)}`)).json();
+  if (!j.ok) { ta.value = "（読込失敗）" + j.error; return; }
+  ta.value = j.content; ta.readOnly = !j.writable;
+  document.getElementById("m-save").disabled = !j.writable;
+  document.getElementById("m-ro").textContent = j.writable ? "" : "読み取り専用（編集不可パス）";
+  document.getElementById("m-preview").style.display = isMd ? "inline-block" : "none";
+  document.getElementById("m-del").style.display = (opts.deletable && j.writable) ? "inline-block" : "none";
+  setPreview(isMd); // .md は既定でプレビュー表示、編集時だけ生MD
+}
+function closeModal(){ document.getElementById("modal").classList.remove("on"); curPath=null; }
+async function saveFile() {
+  const content = document.getElementById("m-text").value;
+  const btn = document.getElementById("m-save");
+  btn.disabled = true; btn.textContent = "保存中…";
+  const title = document.getElementById("m-title").textContent;
+  const j = await (await api("/api/file",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:curPath,content})})).json();
+  if (j.ok) { btn.textContent="保存しました"; logActivity(`保存: ${title}`); cache={}; setTimeout(()=>{ closeModal(); go(active); btn.textContent="保存"; btn.disabled=false; },650); }
+  else { alert("保存失敗: "+j.error); btn.textContent="保存"; btn.disabled=false; }
+}
+async function deleteFile(){
+  if (!confirm("このファイルを削除します（.bak を残します）。よろしいですか？")) return;
+  const title = document.getElementById("m-title").textContent;
+  const j = await (await api(`/api/file?path=${encodeURIComponent(curPath)}`,{method:"DELETE"})).json();
+  if (j.ok) { logActivity(`削除: ${title}`); cache={}; closeModal(); go(active); }
+  else alert("削除失敗: "+j.error);
+}
+
+/* ── 新規作成 ── */
+let createCtx = null;
+function openCreate(type, projectKey){
+  createCtx = { type: type || META[active].create, projectKey };
+  document.getElementById("c-title").textContent =
+    createCtx.type==="skill"?"新規スキル":createCtx.type==="agent"?"新規サブエージェント":"新規メモリ";
+  document.getElementById("c-hint").textContent = CREATE_HINT[createCtx.type] || "";
+  document.getElementById("c-name").value = "";
+  document.getElementById("createModal").classList.add("on");
+  setTimeout(()=>document.getElementById("c-name").focus(), 50);
+}
+function closeCreate(){ document.getElementById("createModal").classList.remove("on"); createCtx=null; }
+async function doCreate(){
+  const name = document.getElementById("c-name").value.trim();
+  if (!name) return;
+  const body = { type:createCtx.type, name, projectKey:createCtx.projectKey };
+  const j = await (await api("/api/create",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})).json();
+  if (!j.ok) { alert("作成失敗: "+j.error); return; }
+  const type = createCtx.type;
+  logActivity(`作成: ${type==="skill"?"スキル":type==="agent"?"サブエージェント":"メモリ"}「${name}」`);
+  closeCreate(); cache={};
+  // 作成直後に編集を開く
+  openFile(j.path, name, { deletable:true });
+  // 一覧を更新
+  if (type==="memory") cache.projects=null; else cache[type==="skill"?"skills":"agents"]=null;
+}
+
+/* ── 最小Markdownレンダラ（プレビュー用・参照性向上） ── */
+function mdToHtml(md){
+  const esc2 = s => s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  // frontmatter を枠で表示
+  let fm = "";
+  md = md.replace(/^---\n([\s\S]*?)\n---\n?/, (_,b)=>{ fm = `<pre style="background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--muted);overflow:auto">${esc2(b)}</pre>`; return ""; });
+  const lines = md.split("\n"); let html=""; let inList=false, inCode=false;
+  for (let ln of lines){
+    if (/^```/.test(ln)){ if(inCode){html+="</pre>";inCode=false;} else {html+='<pre style="background:var(--surface-2);border-radius:8px;padding:12px;overflow:auto;font-size:12.5px">';inCode=true;} continue; }
+    if (inCode){ html+=esc2(ln)+"\n"; continue; }
+    ln = esc2(ln)
+      .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+      .replace(/`([^`]+)`/g,'<code style="background:var(--surface-2);padding:1px 5px;border-radius:4px;font-size:.9em">$1</code>')
+      .replace(/\[\[([^\]]+)\]\]/g,'<span style="color:var(--accent)">[[$1]]</span>')
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" style="color:var(--accent)">$1</a>');
+    let m;
+    if (m=ln.match(/^(#{1,4})\s+(.*)/)){ if(inList){html+="</ul>";inList=false;} const lv=m[1].length; html+=`<h${lv} style="margin:14px 0 6px;font-size:${20-lv*2}px;font-weight:600">${m[2]}</h${lv}>`; }
+    else if (/^[-*]\s+/.test(ln)){ if(!inList){html+='<ul style="margin:6px 0;padding-left:20px">';inList=true;} html+=`<li style="margin:3px 0">${ln.replace(/^[-*]\s+/,'')}</li>`; }
+    else if (ln.trim()===""){ if(inList){html+="</ul>";inList=false;} html+=""; }
+    else { if(inList){html+="</ul>";inList=false;} html+=`<p style="margin:6px 0;line-height:1.7">${ln}</p>`; }
+  }
+  if(inList)html+="</ul>"; if(inCode)html+="</pre>";
+  return fm+html;
+}
+
+document.addEventListener("keydown", e => {
+  if(e.key==="Escape"){ closeModal(); closeCreate(); closeMcp(); }
+  if((e.metaKey||e.ctrlKey) && (e.key==="j"||e.key==="J")){ e.preventDefault(); toggleWidget(); }
+});
+
+/* ── サイドバー（ドロワー） ── */
+let navOpen = window.innerWidth > 760;
+function applyNav(){
+  document.querySelector(".app").classList.toggle("nav-hidden", !navOpen);
+  document.getElementById("nav-ovl").classList.toggle("on", navOpen && window.innerWidth<=760);
+}
+function toggleNav(force){ navOpen = (force===undefined)? !navOpen : !!force; applyNav(); }
+// モバイルでメニュー選択したら閉じる
+document.querySelectorAll(".navitem").forEach(n=>n.addEventListener("click",()=>{ if(window.innerWidth<=760) toggleNav(false); }));
+applyNav();
+
+go("home");
+// 件数を常に表示（ローカル読み取りのみ・Claude枠は使わない）
+["skills","agents","projects","sessions","routines"].forEach(t=>{
+  const ep = t==="routines" ? "/api/routines" : `/api/${t}`;
+  api(ep).then(r=>r.json()).then(d=>{
+    if(t==="routines"){ const n=(d.agents||[]).length; const el=document.getElementById("ct-routines"); if(el)el.textContent=n||""; return; }
+    cache[t]=cache[t]||d; const el=document.getElementById("ct-"+t); if(el&&Array.isArray(d))el.textContent=d.length;
+    if(t==="projects") fillWidgetTargets();
+  }).catch(()=>{});
+});
+
+// プロジェクト状況をアシスタントに更新依頼
+function updateProjectStatus(name, path){
+  toggleWidget(true); setMode('apply');
+  const sel=document.getElementById("fw-target"); if(sel){ const opt=[...sel.options].find(o=>o.value==='project::'+path); if(opt) sel.value=opt.value; }
+  const ta=document.getElementById("fw-prompt");
+  if(ta){ ta.value=`プロジェクト「${name}」の現状を点検し、README.md / CLAUDE.md / ROADMAP.md の概要・ロードマップ・課題を最新の実態に合わせて更新してください。完了タスクのチェック、未完・新規課題の追記、概要のズレ修正を行い、変更点を報告してください。`; ta.focus(); }
+}
+</script>
+</body>
+</html>
