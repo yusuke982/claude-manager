@@ -6,7 +6,7 @@
 
 ## 場所と起動
 
-- **パス**: `/Volumes/MacData/Creator/cc-dashboard`（git管理済み・npm名 `claude-manager`）
+- **パス**: （任意のローカルディレクトリ）
 - **ポート**: 4317（固定）
 - **スタック**: Node.js + Express + 単一HTML（バニラJS）。Viteなし・ビルドなし。
 

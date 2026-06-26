@@ -19,12 +19,12 @@
   "description": "ClaudeManager — a local dashboard to view and edit your Claude Code config (skills, subagents, project memory, settings)",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Yusuke/claude-manager.git"
+    "url": "https://github.com/yusuke982/claude-manager.git"
   },
   "bugs": {
-    "url": "https://github.com/Yusuke/claude-manager/issues"
+    "url": "https://github.com/yusuke982/claude-manager/issues"
   },
-  "homepage": "https://github.com/Yusuke/claude-manager#readme",
+  "homepage": "https://github.com/yusuke982/claude-manager#readme",
   "type": "module",
   "dependencies": {
     "express": "^5.2.1"
