@@ -1,5 +1,5 @@
 {
-  "name": "claude-manager",
+  "name": "cc-manager",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
@@ -30,6 +30,6 @@
     "express": "^5.2.1"
   },
   "bin": {
-    "claude-manager": "server.js"
+    "cc-manager": "server.js"
   }
 }

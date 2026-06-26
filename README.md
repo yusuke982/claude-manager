@@ -13,10 +13,10 @@
 
 ```bash
 # 自分のマシンだけで使う（既定・安全）
-npx claude-manager --open
+npx cc-manager --open
 
 # LAN / Tailscale 経由でスマホ等から使う（トークン自動発行）
-npx claude-manager --host :: --open
+npx cc-manager --host :: --open
 ```
 
 ローカル開発時:

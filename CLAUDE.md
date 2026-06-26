@@ -6,7 +6,7 @@
 
 ## 場所と起動
 
-- **パス**: （任意のローカルディレクトリ）
+- **パス**: （任意のローカルディレクトリ）（git管理済み・npm名 `cc-manager`）
 - **ポート**: 4317（固定）
 - **スタック**: Node.js + Express + 単一HTML（バニラJS）。Viteなし・ビルドなし。
 
@@ -25,7 +25,7 @@ cc-dashboard/
 ├── server.js        Express サーバー（~/.claude 読み書き + claude CLI 実行）
 ├── public/
 │   └── index.html   バニラJSの単一ファイルUI
-├── package.json     bin: claude-manager → server.js
+├── package.json     bin: cc-manager → server.js
 └── CLAUDE.md        本ファイル
 ```
 
@@ -128,10 +128,10 @@ cc-dashboard/
 - [ ] セッション検索・絞り込み
 - [ ] ルーチン手動実行ボタン
 
-### Stage 2 — npm 公開（npx claude-manager）
+### Stage 2 — npm 公開（npx cc-manager）
 
 - [ ] README 整備（スクリーンショット付き）
-- [ ] `bin` エントリの動作確認（`npx claude-manager` 一発起動）
+- [ ] `bin` エントリの動作確認（`npx cc-manager` 一発起動）
 - [ ] バージョニング（1.0.0 リリースタグ）
 - [ ] npm publish（public リポジトリ確認後）
 
